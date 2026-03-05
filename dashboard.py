@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
 import threading
@@ -275,6 +278,14 @@ def history(symbol):
         return jsonify(h)
     return jsonify({"error": "Not found"}), 404
 
+# Iniciar hilos al importar el módulo (para Gunicorn/Render)
+# Solo si no es el proceso principal (que se maneja en el if __name__ abajo)
+if os.environ.get("GUNICORN_STARTED") or os.environ.get("RENDER"):
+    # Hilo del bot (Análisis y ejecución profunda)
+    threading.Thread(target=bot_loop, daemon=True).start()
+    # Hilo de streaming (Precios en tiempo real)
+    threading.Thread(target=stream_updates, daemon=True).start()
+
 if __name__ == '__main__':
     # Hilo del bot (Análisis y ejecución profunda)
     t = threading.Thread(target=bot_loop, daemon=True)
@@ -284,6 +295,6 @@ if __name__ == '__main__':
     s = threading.Thread(target=stream_updates, daemon=True)
     s.start()
     
-    # Render binding: host 0.0.0.0 and dynamic port
+    # Render/Local binding
     port = int(os.environ.get("PORT", 5002))
     socketio.run(app, host='0.0.0.0', port=port, debug=False)
