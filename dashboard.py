@@ -57,11 +57,23 @@ logging.basicConfig(
     handlers=log_handlers
 )
 
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "101010")
+SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_hex(16))
+
 app = Flask(__name__)
+app.secret_key = SECRET_KEY
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('authenticated'):
+            return redirect(url_for('login', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.after_request
 def add_header(response):
@@ -117,6 +129,7 @@ def stream_updates():
             time.sleep(5)
 
 @app.route('/api/diagnostics')
+@login_required
 def diagnostics():
     return jsonify({
         "status": "online",
@@ -136,11 +149,35 @@ def handle_connect():
 def health():
     return "OK", 200
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        password = request.form.get('password')
+        if password == APP_PASSWORD:
+            session['authenticated'] = True
+            session.permanent = True
+            next_url = request.args.get('next') or url_for('index')
+            return redirect(next_url)
+        else:
+            return render_template('login.html', error=True)
+    
+    if session.get('authenticated'):
+        return redirect(url_for('index'))
+        
+    return render_template('login.html', error=False)
+
+@app.route('/logout')
+def logout():
+    session.pop('authenticated', None)
+    return redirect(url_for('login'))
+
 @app.route('/')
+@login_required
 def index():
     return render_template('index.html')
 
 @app.route('/api/status')
+@login_required
 def status():
     tf = request.args.get('tf', '1h')
     # Devolver las stats filtradas por el timeframe solicitado
@@ -156,6 +193,7 @@ def status():
     })
 
 @app.route('/api/trading/history')
+@login_required
 def api_get_trading_history_v2():
     try:
         # Get base history and stats from engine
