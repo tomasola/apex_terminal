@@ -9,17 +9,35 @@ gevent.monkey.patch_all()
 print(">>> DATA: APEX Terminal starting up... (forced flush)", flush=True)
 
 try:
+    print(">>> Importing flask...", flush=True)
     from flask import Flask, render_template, jsonify, request
+    
+    print(">>> Importing flask_socketio...", flush=True)
     from flask_socketio import SocketIO, emit
+    
+    print(">>> Importing threading...", flush=True)
     import threading
+    
+    print(">>> Importing time...", flush=True)
     import time
+    
+    print(">>> Importing logging...", flush=True)
     import logging
+    
+    print(">>> Importing engine...", flush=True)
     from engine import TradeEngine
+    
+    print(">>> Importing os...", flush=True)
     import os
+    
+    print(">>> Importing dotenv...", flush=True)
     from dotenv import load_dotenv
+    
+    print(">>> Importing RotatingFileHandler...", flush=True)
     from logging.handlers import RotatingFileHandler
+    
     print(">>> DATA: Imports completed.", flush=True)
-except Exception as e:
+except BaseException as e:
     print(f">>> CRITICAL IMPORT ERROR: {e}", file=sys.stderr, flush=True)
     traceback.print_exc()
     raise
