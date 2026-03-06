@@ -23,7 +23,11 @@ class TradeEngine:
         if testnet:
             self.exchange.set_sandbox_mode(True)
             
-        self.symbols = ['BTC/USDC', 'ETH/USDC', 'SOL/USDC']
+        self.symbols = [
+            'BTC/USDC', 'ETH/USDC', 'SOL/USDC', 'BNB/USDC', 'XRP/USDC', 
+            'ADA/USDC', 'DOGE/USDC', 'DOT/USDC', 'MATIC/USDC', 'LINK/USDC',
+            'AVAX/USDC', 'UNI/USDC', 'LTC/USDC', 'BCH/USDC'
+        ]
         self.timeframes = ['1m', '5m', '15m', '1h', '1d']
         
         # Trading State

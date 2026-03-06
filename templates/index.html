@@ -140,6 +140,22 @@
             padding: 8px;
         }
 
+        #watchlist-items {
+            max-height: 200px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #334155 transparent;
+        }
+
+        #watchlist-items::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #watchlist-items::-webkit-scrollbar-thumb {
+            background-color: #334155;
+            border-radius: 4px;
+        }
+
         .watchlist-item {
             display: flex;
             justify-content: space-between;
