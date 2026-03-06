@@ -8,21 +8,24 @@ gevent.monkey.patch_all()
 
 print(">>> DATA: APEX Terminal starting up... (forced flush)", flush=True)
 
-from flask import Flask, render_template, jsonify, request
-from flask_socketio import SocketIO, emit
-import threading
-import time
-import logging
-from engine import TradeEngine
-import os
-from dotenv import load_dotenv
-
-print(">>> DATA: Imports completed.")
+try:
+    from flask import Flask, render_template, jsonify, request
+    from flask_socketio import SocketIO, emit
+    import threading
+    import time
+    import logging
+    from engine import TradeEngine
+    import os
+    from dotenv import load_dotenv
+    from logging.handlers import RotatingFileHandler
+    print(">>> DATA: Imports completed.", flush=True)
+except Exception as e:
+    print(f">>> CRITICAL IMPORT ERROR: {e}", file=sys.stderr, flush=True)
+    traceback.print_exc()
+    raise
 
 # Cargar variables locales desde .env si existe
 load_dotenv()
-
-from logging.handlers import RotatingFileHandler
 
 # Configuración básica con archivo y consola (Archivo desactivado en Render)
 log_handlers = [logging.StreamHandler()]
