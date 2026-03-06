@@ -10,7 +10,7 @@ print(">>> DATA: APEX Terminal starting up... (forced flush)", flush=True)
 
 try:
     print(">>> Importing flask...", flush=True)
-    from flask import Flask, render_template, jsonify, request
+    from flask import Flask, render_template, jsonify, request, session, redirect, url_for
     
     print(">>> Importing flask_socketio...", flush=True)
     from flask_socketio import SocketIO, emit
@@ -232,6 +232,7 @@ def api_get_trading_history_v2():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/trading/params', methods=['POST']) # Corrected endpoint name to match index.html
+@login_required
 def update_params():
     try:
         data = request.json
@@ -272,6 +273,7 @@ def update_params():
         return jsonify({"status": "error", "message": str(e)}), 400
 
 @app.route('/api/trading/mode', methods=['POST'])
+@login_required
 def set_trading_mode():
     data = request.json
     mode = data.get('mode')
@@ -282,6 +284,7 @@ def set_trading_mode():
     return jsonify({"status": "error", "message": "Invalid mode"}), 400
 
 @app.route('/api/trading/manual', methods=['POST'])
+@login_required
 def manual_trade():
     try:
         data = request.json
