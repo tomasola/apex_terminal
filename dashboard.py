@@ -79,13 +79,19 @@ if not API_KEY or not API_SECRET:
 
 engine = TradeEngine(API_KEY, API_SECRET, testnet=False)
 
+# Track last errors for diagnostics
+last_errors = []
+
 def bot_loop():
     while True:
         try:
             engine.run_cycle()
             time.sleep(30)
         except Exception as e:
-            logging.error(f"Loop error: {e}")
+            err_msg = f"Loop error: {e}"
+            logging.error(err_msg)
+            last_errors.append(err_msg)
+            if len(last_errors) > 20: last_errors.pop(0)
             time.sleep(5)
 
 def stream_updates():
@@ -104,21 +110,28 @@ def stream_updates():
             # Sleep a bit to avoid hitting rate limits too hard, but keep it snappy
             time.sleep(2) 
         except Exception as e:
-            logging.error(f"Streaming error: {e}")
+            err_msg = f"Streaming error: {e}"
+            logging.error(err_msg)
+            last_errors.append(err_msg)
+            if len(last_errors) > 20: last_errors.pop(0)
             time.sleep(5)
+
+@app.route('/api/diagnostics')
+def diagnostics():
+    return jsonify({
+        "status": "online",
+        "last_errors": last_errors,
+        "symbols": list(engine.history.keys()),
+        "bot_trading_mode": engine.trading_mode
+    })
 
 @socketio.on('connect')
 def handle_connect():
     logging.info("Cliente conectado via WebSocket")
     emit('status_msg', {'msg': 'Conectado al APEX Stream'})
     
-    # Start background tasks if not already started
-    if not hasattr(app, 'bot_threads_started'):
-        app.bot_threads_started = True
-        socketio.start_background_task(bot_loop)
-        socketio.start_background_task(stream_updates)
-        logging.info("Hilos de fondo iniciados via SocketIO")
-
+    # Hilos de fondo ya están iniciados en __main__
+    
 @app.route('/health')
 def health():
     return "OK", 200
