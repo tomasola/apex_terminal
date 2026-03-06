@@ -1,7 +1,12 @@
+import sys
+import traceback
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
 import gevent.monkey
 gevent.monkey.patch_all()
 
-print(">>> DATA: APEX Terminal starting up...")
+print(">>> DATA: APEX Terminal starting up... (forced flush)", flush=True)
 
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
@@ -298,14 +303,21 @@ def history(symbol):
 # Se iniciarán automáticamente al conectar el primer SocketIO client
 
 if __name__ == '__main__':
-    # Hilo del bot (Análisis y ejecución profunda)
-    t = threading.Thread(target=bot_loop, daemon=True)
-    t.start()
-    
-    # Hilo de streaming (Precios en tiempo real)
-    s = threading.Thread(target=stream_updates, daemon=True)
-    s.start()
-    
-    # Render/Local binding
-    port = int(os.environ.get("PORT", 5002))
-    socketio.run(app, host='0.0.0.0', port=port, debug=False)
+    try:
+        print(">>> DATA: Initiating background threads...", flush=True)
+        # Hilo del bot (Análisis y ejecución profunda)
+        t = threading.Thread(target=bot_loop, daemon=True)
+        t.start()
+        
+        # Hilo de streaming (Precios en tiempo real)
+        s = threading.Thread(target=stream_updates, daemon=True)
+        s.start()
+        
+        # Render/Local binding
+        port = int(os.environ.get("PORT", 5002))
+        print(f">>> DATA: Attempting to bind SocketIO to 0.0.0.0:{port}...", flush=True)
+        socketio.run(app, host='0.0.0.0', port=port, debug=False)
+    except Exception as e:
+        print(f">>> CRITICAL STARTUP ERROR: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc()
+        raise
