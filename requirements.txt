@@ -2,6 +2,7 @@ ccxt
 flask
 flask-socketio
 gevent
+gevent-websocket
 pandas
 numpy
 requests

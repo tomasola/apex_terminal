@@ -9,7 +9,5 @@ services:
         sync: false
       - key: BINANCE_API_SECRET
         sync: false
-      - key: PORT
-        sync: false
       - key: PYTHON_VERSION
         value: 3.9.18
