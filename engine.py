@@ -15,7 +15,10 @@ class TradeEngine:
             'apiKey': api_key,
             'secret': api_secret,
             'enableRateLimit': True,
-            'options': {'defaultType': 'spot'}
+            'options': {
+                'defaultType': 'spot',
+                'adjustForTimeDifference': True
+            }
         })
         if testnet:
             self.exchange.set_sandbox_mode(True)
