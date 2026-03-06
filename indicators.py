@@ -137,3 +137,10 @@ def calculate_adx(df, length=14):
     adx = rma(dx, length)
     
     return adx
+
+def calculate_bollinger_bands(series, period=20, std_dev=2):
+    sma = series.rolling(window=period).mean()
+    std = series.rolling(window=period).std()
+    upper_band = sma + (std * std_dev)
+    lower_band = sma - (std * std_dev)
+    return upper_band, sma, lower_band

@@ -246,6 +246,7 @@ def update_params():
         engine.params['investment_amount'] = float(data.get('investment_amount', 100.0))
         engine.params['trading_timeframe'] = data.get('trading_timeframe', '1h')
         engine.params['stop_loss_pct'] = float(data.get('stop_loss_pct', 5.0))
+        engine.params['take_profit_pct'] = float(data.get('take_profit_pct', 0.0))
         engine.params['trailing_stop'] = bool(data.get('trailing_stop', False))
         engine.params['active_strategy'] = int(data.get('active_strategy', 1))
         engine.params['ema_fast'] = int(data.get('ema_fast', 9))

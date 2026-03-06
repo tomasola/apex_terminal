@@ -7,8 +7,7 @@ import json
 import os
 import requests
 import datetime
-from indicators import calculate_rsi_divergence, calculate_stochastic_supertrend, calculate_macd, calculate_adx, calculate_ema, calculate_rsi
-
+from indicators import calculate_rsi_divergence, calculate_stochastic_supertrend, calculate_macd, calculate_adx, calculate_ema, calculate_rsi, calculate_bollinger_bands
 class TradeEngine:
     def __init__(self, api_key, api_secret, testnet=True):
         self.exchange = ccxt.binance({
@@ -80,6 +79,17 @@ class TradeEngine:
             'stoch_offset': 30
         }
 
+    def send_telegram(self, msg):
+        token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+        if token and chat_id:
+            try:
+                url = f"https://api.telegram.org/bot{token}/sendMessage"
+                # Send quickly
+                requests.post(url, json={'chat_id': chat_id, 'text': msg}, timeout=3)
+            except Exception as e:
+                logging.error(f"Telegram err: {e}")
+
     def fetch_ohlcv(self, symbol, timeframe='1h', limit=250):
         try:
             ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
@@ -107,6 +117,12 @@ class TradeEngine:
         df['rsi'] = calculate_rsi(df['close'], period=14)
         df['ema_fast'] = calculate_ema(df['close'], length=self.params['ema_fast'])
         df['ema_slow'] = calculate_ema(df['close'], length=self.params['ema_slow'])
+        
+        # Calculate Bollinger Bands
+        upper_bb, sma_bb, lower_bb = calculate_bollinger_bands(df['close'], period=20, std_dev=2)
+        df['upper_bb'] = upper_bb
+        df['sma_bb'] = sma_bb
+        df['lower_bb'] = lower_bb
 
         rsi_div = indicators_data.get('rsi_div')
         stoch_k = indicators_data.get('stoch_rsi')
@@ -119,12 +135,27 @@ class TradeEngine:
         
         candles = []
         for i in range(len(df)):
+            # Handle NaNs in BB returning None for json serialization
+            ubb = float(df['upper_bb'].iloc[i]) if not pd.isna(df['upper_bb'].iloc[i]) else None
+            mbb = float(df['sma_bb'].iloc[i]) if not pd.isna(df['sma_bb'].iloc[i]) else None
+            lbb = float(df['lower_bb'].iloc[i]) if not pd.isna(df['lower_bb'].iloc[i]) else None
+            
+            # EMA Handle NaNs
+            ef = float(df['ema_fast'].iloc[i]) if not pd.isna(df['ema_fast'].iloc[i]) else None
+            es = float(df['ema_slow'].iloc[i]) if not pd.isna(df['ema_slow'].iloc[i]) else None
+            
             candles.append({
                 'time': int(timestamps[i]),
                 'open': float(df['open'].iloc[i]),
                 'high': float(df['high'].iloc[i]),
                 'low': float(df['low'].iloc[i]),
-                'close': float(df['close'].iloc[i])
+                'close': float(df['close'].iloc[i]),
+                'volume': float(df['volume'].iloc[i]),
+                'upper_bb': ubb,
+                'sma_bb': mbb,
+                'lower_bb': lbb,
+                'ema_fast': ef,
+                'ema_slow': es
             })
             
         rsi_data = []
@@ -220,8 +251,8 @@ class TradeEngine:
                 except Exception as e:
                     logging.error(f"Analysis error for {s} ({tf}): {e}")
 
-        # Check Stop Loss for all active positions
-        self.check_stop_loss()
+        # Check Stop Loss & Take Profit for all active positions
+        self.check_risk_management()
 
 
     def execute_trade_logic(self, symbol, signal, price):
@@ -259,6 +290,32 @@ class TradeEngine:
                 order = self.exchange.create_market_buy_order(symbol, qty)
                 logging.info(f"REAL BUY ORDER PLACED: {symbol} @ {price}")
                 pos['order_id'] = order['id']
+                
+                # OCO Logic
+                sl_pct = float(self.params.get('stop_loss_pct', 5.0))
+                tp_pct = float(self.params.get('take_profit_pct', 0.0))
+                
+                if sl_pct > 0 and tp_pct > 0:
+                    try:
+                        stop_price = price * (1 - (sl_pct / 100))
+                        limit_price = price * (1 + (tp_pct / 100))
+                        
+                        oco_params = {
+                            'stopPrice': self.exchange.price_to_precision(symbol, stop_price),
+                            'stopLimitPrice': self.exchange.price_to_precision(symbol, stop_price),
+                            'stopLimitTimeInForce': 'GTC'
+                        }
+                        # Place OCO (Limit Maker for TP, Stop Limit for SL)
+                        oco_order = self.exchange.create_order(
+                            symbol, 'limit', 'sell', qty, 
+                            self.exchange.price_to_precision(symbol, limit_price), 
+                            oco_params
+                        )
+                        logging.info(f"REAL OCO PLACED: {symbol} TP @ {limit_price}, SL @ {stop_price}")
+                        pos['oco_id'] = oco_order['id'] # Track OCO
+                    except Exception as eco:
+                        logging.error(f"Failed to place OCO for {symbol}: {eco}")
+
             except Exception as e:
                 err_msg = f"FALLO COMPRA REAL para {symbol}: {e}"
                 logging.error(err_msg)
@@ -266,8 +323,9 @@ class TradeEngine:
 
         self.active_positions[symbol] = pos
         self.save_history()
-        msg = f"Posición ABIERTA [{self.trading_mode}]: {symbol} @ {price}"
+        msg = f"🟢 Posición ABIERTA [{self.trading_mode}]: {symbol} @ {price}"
         logging.info(msg)
+        self.send_telegram(msg)
         return True, msg
 
     def close_position(self, symbol, price):
@@ -297,6 +355,14 @@ class TradeEngine:
         
         if self.trading_mode == "REAL":
             try:
+                # Cancel OCO if it exists before selling manually
+                if 'oco_id' in pos:
+                    try:
+                        self.exchange.cancel_order(pos['oco_id'], symbol)
+                        logging.info(f"Cancelled dangling OCO {pos['oco_id']} for {symbol}")
+                    except Exception as eco:
+                        logging.warning(f"Could not cancel OCO {pos['oco_id']} for {symbol}: {eco}")
+
                 # Actual Binance Order
                 self.exchange.create_market_sell_order(symbol, qty)
                 logging.info(f"REAL SELL ORDER PLACED: {symbol} @ {price}")
@@ -304,13 +370,14 @@ class TradeEngine:
                 err_msg = f"FALLO VENTA REAL para {symbol}: {e}"
                 logging.error(err_msg)
                 # Note: We still popped the position, but it failed on exchange.
-                # In a real app, we'd handle this more gracefully.
                 return False, err_msg
         
         self.trade_history.append(trade)
         self.save_history()
-        msg = f"Posición CERRADA [{pos['mode']}]: {symbol} PnL: {trade['pnl_pct']}%"
+        status_icon = "🔵" if pnl_pct > 0 else "🔴"
+        msg = f"{status_icon} Posición CERRADA [{pos['mode']}]: {symbol} PnL: {trade['pnl_pct']}%"
         logging.info(msg)
+        self.send_telegram(msg)
         return True, msg
 
     def get_trade_history(self):
@@ -385,9 +452,11 @@ class TradeEngine:
             logging.error(f"Error fetching balance from Binance: {e}")
             return 0.0
 
-    def check_stop_loss(self):
+    def check_risk_management(self):
         sl_threshold = float(self.params.get('stop_loss_pct', 5.0))
-        if sl_threshold <= 0:
+        tp_threshold = float(self.params.get('take_profit_pct', 0.0))
+        
+        if sl_threshold <= 0 and tp_threshold <= 0:
             return
 
         symbols_to_close = []
@@ -400,9 +469,15 @@ class TradeEngine:
                 # Calculate current PnL %
                 pnl_pct = (current_price - entry_price) / entry_price * 100
                 
-                # Trailing Stop Logic: If in profit, move SL up if current price is higher than seen before
+                # TAKE PROFIT LOGIC
+                if tp_threshold > 0 and pnl_pct >= tp_threshold:
+                    logging.warning(f"TAKE PROFIT HIT for {symbol}: {pnl_pct:.2f}% (Target: {tp_threshold}%)")
+                    symbols_to_close.append((symbol, current_price, 'WIN (TP)'))
+                    continue
+
+                # TRAILING STOP LOGIC
                 is_trailing = self.params.get('trailing_stop', False)
-                if is_trailing and pnl_pct > 1.0: # Start trailing after 1% profit
+                if is_trailing and sl_threshold > 0 and pnl_pct > 1.0: # Start trailing after 1% profit
                     highest_seen = pos.get('highest_price', entry_price)
                     if current_price > highest_seen:
                         pos['highest_price'] = current_price
@@ -412,20 +487,22 @@ class TradeEngine:
                     trail_pnl_pct = (current_price - pos['highest_price']) / pos['highest_price'] * 100
                     if trail_pnl_pct <= -sl_threshold:
                         logging.warning(f"TRAILING STOP HIT for {symbol}: {trail_pnl_pct:.2f}% (Peak: {pos['highest_price']})")
-                        symbols_to_close.append((symbol, current_price))
+                        symbols_to_close.append((symbol, current_price, 'LOSS (TRAIL)'))
                         continue
 
-                if pnl_pct <= -sl_threshold:
+                # STANDARD STOP LOSS LOGIC
+                if sl_threshold > 0 and pnl_pct <= -sl_threshold:
                     logging.warning(f"STOP LOSS HIT for {symbol}: {pnl_pct:.2f}% (Limit: -{sl_threshold}%)")
-                    symbols_to_close.append((symbol, current_price))
+                    symbols_to_close.append((symbol, current_price, 'LOSS (STOP)'))
+                    
             except Exception as e:
-                logging.error(f"Error checking SL for {symbol}: {e}")
+                logging.error(f"Error checking TP/SL for {symbol}: {e}")
 
-        for symbol, price in symbols_to_close:
+        for symbol, price, reason in symbols_to_close:
             self.close_position(symbol, price)
-            # Add a tag to the last trade to indicate it was a Stop Loss
+            # Add a tag to the last trade to indicate it was a TP/SL
             if self.trade_history:
-                self.trade_history[-1]['status'] = 'LOSS (STOP)'
+                self.trade_history[-1]['status'] = reason
                 self.save_history()
 
     def get_watchlist(self):

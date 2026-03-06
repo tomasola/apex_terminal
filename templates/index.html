@@ -511,10 +511,17 @@
                     <input type="number" id="investment_amount" value="20"
                         style="width: 100%; background: #131722; border: 1px solid #2a2e39; color: white; border-radius: 2px; padding: 2px; font-size: 10px; margin-bottom: 8px;">
                 </div>
-                <div>
-                    <label style="display: block; font-size: 8px; color: var(--text-muted);">STOP LOSS (%)</label>
-                    <input type="number" id="stop_loss_pct" value="5.0" step="0.5"
-                        style="width: 100%; background: #131722; border: 1px solid #2a2e39; color: var(--red); border-radius: 2px; padding: 2px; font-size: 10px; font-weight: bold; margin-bottom: 8px;">
+                <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+                    <div style="flex:1;">
+                        <label style="display: block; font-size: 8px; color: var(--text-muted);">TAKE PROFIT (%)</label>
+                        <input type="number" id="take_profit_pct" value="0.0" step="0.5"
+                            style="width: 100%; background: #131722; border: 1px solid #2a2e39; color: var(--green); border-radius: 2px; padding: 2px; font-size: 10px; font-weight: bold;">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="display: block; font-size: 8px; color: var(--text-muted);">STOP LOSS (%)</label>
+                        <input type="number" id="stop_loss_pct" value="5.0" step="0.5"
+                            style="width: 100%; background: #131722; border: 1px solid #2a2e39; color: var(--red); border-radius: 2px; padding: 2px; font-size: 10px; font-weight: bold;">
+                    </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
                     <input type="checkbox" id="trailing_stop" style="cursor: pointer;">
@@ -598,6 +605,10 @@
 
 
             <div id="symbol-list"></div>
+
+            <!-- Audio Notification -->
+            <audio id="trade-sound"
+                src="https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=success-1-6297.mp3"></audio>
             <div style="margin-top:auto;">
                 <div style="font-size: 10px; color: #787b86; margin-bottom: 5px; text-transform: uppercase;">Signal
                 </div>
@@ -640,9 +651,22 @@
 
             <main class="charts-grid" id="main-charts-grid">
                 <div class="pane-tv focused" id="pane-1" onclick="focusChart(1)">
-                    <div class="chart-header">
+                    <div class="chart-header" style="justify-content: flex-start; gap: 10px;">
                         <div class="chart-title" id="title-1">BTC/USDC</div>
-                        <div class="mini-tf-selector" id="mini-tf-1">
+                        <!-- Toggles for overlays -->
+                        <div class="overlay-toggles"
+                            style="display:flex; gap:8px; align-items:center; border-right: 1px solid rgba(255,255,255,0.1); padding-right:10px;">
+                            <label style="font-size:10px; color:var(--text-muted); cursor:pointer;"><input
+                                    type="checkbox" id="t-ema-1" onchange="updateOverlays()"
+                                    style="vertical-align: middle; margin:0 2px 0 0;"> EMA</label>
+                            <label style="font-size:10px; color:var(--text-muted); cursor:pointer;"><input
+                                    type="checkbox" id="t-bb-1" onchange="updateOverlays()"
+                                    style="vertical-align: middle; margin:0 2px 0 0;"> BB</label>
+                            <label style="font-size:10px; color:var(--text-muted); cursor:pointer;"><input
+                                    type="checkbox" id="t-vol-1" onchange="updateOverlays()"
+                                    style="vertical-align: middle; margin:0 2px 0 0;" checked> VOL</label>
+                        </div>
+                        <div class="mini-tf-selector" id="mini-tf-1" style="margin-left: auto;">
                             <button class="mini-tf-btn" onclick="setTimeframe('1m', 1)">1m</button>
                             <button class="mini-tf-btn" onclick="setTimeframe('5m', 1)">5m</button>
                             <button class="mini-tf-btn" onclick="setTimeframe('15m', 1)">15m</button>
@@ -829,21 +853,7 @@
             }, 300);
         }
 
-        function playAlert() {
-            try {
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                var osc = audioCtx.createOscillator();
-                var gain = audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
-                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.5);
-            } catch (e) { console.log("Audio fail:", e); }
-        }
+
 
         function showToast(msg, type) {
             var container = document.getElementById('toast-container');
@@ -857,6 +867,14 @@
                 toast.style.opacity = '0';
                 setTimeout(function () { container.removeChild(toast); }, 500);
             }, 5000);
+        }
+
+        // Audio Alert Helper
+        function playAlert() {
+            var audio = document.getElementById('trade-sound');
+            if (audio) {
+                audio.play().catch(function (e) { console.log('Audio autoplay blocked: ', e); });
+            }
         }
 
         // Global Error Catcher
@@ -970,6 +988,21 @@
                     wickUpColor: '#26a69a',
                     wickDownColor: '#ef5350'
                 });
+
+                // --- Overlays ---
+                series.ema_f_overlay = charts.price.addLineSeries({ color: 'rgba(38, 166, 154, 0.7)', lineWidth: 1, title: 'EMA Fast' });
+                series.ema_s_overlay = charts.price.addLineSeries({ color: 'rgba(239, 83, 80, 0.7)', lineWidth: 1, title: 'EMA Slow' });
+
+                series.bb_upper = charts.price.addLineSeries({ color: 'rgba(41, 98, 255, 0.4)', lineWidth: 1, lineStyle: 2, title: 'UBB' });
+                series.bb_lower = charts.price.addLineSeries({ color: 'rgba(41, 98, 255, 0.4)', lineWidth: 1, lineStyle: 2, title: 'LBB' });
+                series.bb_basis = charts.price.addLineSeries({ color: 'rgba(255, 152, 0, 0.4)', lineWidth: 1, title: 'MBB' });
+
+                series.vol = charts.price.addHistogramSeries({
+                    color: 'rgba(38, 166, 154, 0.3)',
+                    priceFormat: { type: 'volume' },
+                    priceScaleId: ''
+                });
+                charts.price.priceScale('').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
 
                 // --- INDICATOR INITIALIZATION ---
 
@@ -1132,6 +1165,34 @@
             });
         }
 
+        function updateOverlays() {
+            if (!window.currentCandlesData) return;
+
+            var showEma = document.getElementById('t-ema-1').checked;
+            var showBb = document.getElementById('t-bb-1').checked;
+            var showVol = document.getElementById('t-vol-1').checked;
+
+            var emf = [], ems = [], ub = [], mb = [], lb = [], vol = [];
+
+            window.currentCandlesData.forEach(function (c) {
+                if (showEma && c.ema_fast !== undefined) emf.push({ time: c.time, value: c.ema_fast });
+                if (showEma && c.ema_slow !== undefined) ems.push({ time: c.time, value: c.ema_slow });
+
+                if (showBb && c.upper_bb !== undefined) ub.push({ time: c.time, value: c.upper_bb });
+                if (showBb && c.sma_bb !== undefined) mb.push({ time: c.time, value: c.sma_bb });
+                if (showBb && c.lower_bb !== undefined) lb.push({ time: c.time, value: c.lower_bb });
+
+                if (showVol && c.volume !== undefined) vol.push({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(38, 166, 154, 0.3)' : 'rgba(239, 83, 80, 0.3)' });
+            });
+
+            if (series.ema_f_overlay) series.ema_f_overlay.setData(emf);
+            if (series.ema_s_overlay) series.ema_s_overlay.setData(ems);
+            if (series.bb_upper) series.bb_upper.setData(ub);
+            if (series.bb_basis) series.bb_basis.setData(mb);
+            if (series.bb_lower) series.bb_lower.setData(lb);
+            if (series.vol) series.vol.setData(vol);
+        }
+
         function update() {
             var url = "/api/history/" + encodeURIComponent(currentSymbol1) + "?tf=" + currentTimeframe1;
             var xhr = new XMLHttpRequest();
@@ -1141,7 +1202,14 @@
                     if (xhr.status === 200) {
                         try {
                             var data = JSON.parse(xhr.responseText);
-                            if (data.candles) series.candles.setData(data.candles);
+
+                            // Save master candles globally to allow redrawing overlays without API call
+                            window.currentCandlesData = data.candles;
+
+                            if (data.candles) {
+                                series.candles.setData(data.candles);
+                                updateOverlays(); // Trigger overlay drawing
+                            }
 
                             // Contextual data based on strategy (Main Chart only for now)
                             if (activeStrategy === 1 || activeStrategy === 4) {
@@ -1253,6 +1321,7 @@
                 st_factor: document.getElementById('st_factor').value,
                 investment_amount: document.getElementById('investment_amount').value,
                 trading_timeframe: document.getElementById('trading_tf').value,
+                take_profit_pct: document.getElementById('take_profit_pct').value,
                 stop_loss_pct: document.getElementById('stop_loss_pct').value,
                 trailing_stop: document.getElementById('trailing_stop').checked,
                 active_strategy: activeStrategy,
@@ -1480,6 +1549,18 @@
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4 && xhr.status === 200) {
                     var data = JSON.parse(xhr.responseText);
+
+                    // Audio Notification Logic
+                    var currentPosCount = Object.keys(data.active_positions).length;
+                    var currentHistCount = data.history.length;
+                    if (window.prevPosCount !== undefined && window.prevHistCount !== undefined) {
+                        if (currentPosCount > window.prevPosCount || currentHistCount > window.prevHistCount) {
+                            playAlert();
+                        }
+                    }
+                    window.prevPosCount = currentPosCount;
+                    window.prevHistCount = currentHistCount;
+
                     document.getElementById('history-pnl').innerText = "TOTAL PnL: " + (data.total_pnl || 0) + "%";
 
                     if (data.profit_curve && profitSeries) {
