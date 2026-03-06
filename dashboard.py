@@ -1,6 +1,8 @@
 import gevent.monkey
 gevent.monkey.patch_all()
 
+print(">>> DATA: APEX Terminal starting up...")
+
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
 import threading
@@ -9,6 +11,8 @@ import logging
 from engine import TradeEngine
 import os
 from dotenv import load_dotenv
+
+print(">>> DATA: Imports completed.")
 
 # Cargar variables locales desde .env si existe
 load_dotenv()
