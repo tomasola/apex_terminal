@@ -1626,7 +1626,11 @@
                         var row = document.createElement('tr');
                         row.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
                         row.style.cursor = "pointer";
+                        row.style.transition = "background 0.2s";
                         row.title = "Clic para ver en el gráfico";
+
+                        row.onmouseover = function () { row.style.background = "rgba(255,255,255,0.05)"; };
+                        row.onmouseout = function () { row.style.background = "transparent"; };
 
                         // Scroll to trade on click
                         row.onclick = function () {
@@ -1637,18 +1641,30 @@
                         };
 
                         var pnlColor = t.pnl_pct >= 0 ? 'var(--green)' : 'var(--red)';
+                        var pnlValStr = t.pnl_pct >= 0 ? '+' + (t.pnl_val ? t.pnl_val.toFixed(2) : '0.00') : (t.pnl_val ? t.pnl_val.toFixed(2) : '0.00');
+                        var pnlPctStr = t.pnl_pct >= 0 ? '+' + t.pnl_pct.toFixed(2) : t.pnl_pct.toFixed(2);
+
+                        // Status Badge styling
+                        var statusStyle = "display:inline-block; padding:2px 6px; border-radius:4px; font-size:9px; font-weight:bold; letter-spacing:0.5px;";
+                        if (t.status === "WIN") {
+                            statusStyle += "background:rgba(20,199,154,0.2); color:var(--green); border:1px solid rgba(20,199,154,0.3);";
+                        } else if (t.status === "LOSS") {
+                            statusStyle += "background:rgba(228,44,105,0.2); color:var(--red); border:1px solid rgba(228,44,105,0.3);";
+                        } else {
+                            statusStyle += "background:rgba(255,165,0,0.2); color:orange; border:1px solid rgba(255,165,0,0.3);";
+                        }
 
                         row.innerHTML =
                             '<td style="padding: 8px;">' + t.symbol + '</td>' +
                             '<td style="padding: 8px;">' + t.mode + '</td>' +
                             '<td style="padding: 8px; color:var(--text-muted);">' + t.entry_time + '</td>' +
                             '<td style="padding: 8px; color:var(--text-muted);">' + t.exit_time + '</td>' +
-                            '<td style="padding: 8px;">' + t.entry_price.toFixed(2) + '</td>' +
-                            '<td style="padding: 8px;">' + t.exit_price.toFixed(2) + '</td>' +
-                            '<td style="padding: 8px; color:' + pnlColor + ';">' + (t.pnl_val ? t.pnl_val.toFixed(2) : '0.00') + '</td>' +
-                            '<td style="padding: 8px; color:' + pnlColor + ';">' + t.pnl_pct + '%</td>' +
-                            '<td style="padding: 8px; font-weight:bold; color:' + pnlColor + ';">' + t.status + '</td>' +
-                            '<td style="padding: 8px; text-align:center;" onclick="event.stopPropagation()"><button onclick="deleteTrade(' + (data.history.length - 1 - i) + ')" style="background:transparent; border:none; cursor:pointer; color:rgba(255,255,255,0.3); font-size:12px;">✕</button></td>';
+                            '<td style="padding: 8px;">$' + t.entry_price.toFixed(4) + '</td>' +
+                            '<td style="padding: 8px;">$' + t.exit_price.toFixed(4) + '</td>' +
+                            '<td style="padding: 8px; color:' + pnlColor + '; font-weight:500;">$' + pnlValStr + '</td>' +
+                            '<td style="padding: 8px; color:' + pnlColor + '; font-weight:500;">' + pnlPctStr + '%</td>' +
+                            '<td style="padding: 8px;"><span style="' + statusStyle + '">' + t.status + '</span></td>' +
+                            '<td style="padding: 8px; text-align:center;" onclick="event.stopPropagation()"><button onclick="deleteTrade(' + (data.history.length - 1 - i) + ')" style="background:transparent; border:none; cursor:pointer; color:rgba(255,255,255,0.3); font-size:12px; transition:color 0.2s;" onmouseover="this.style.color=\'var(--red)\'" onmouseout="this.style.color=\'rgba(255,255,255,0.3)\'">✕</button></td>';
                         historyBody.appendChild(row);
                     });
 
