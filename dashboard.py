@@ -1,5 +1,7 @@
 import sys
 import traceback
+import secrets
+from functools import wraps
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
@@ -390,7 +392,7 @@ if __name__ == '__main__':
         s.start()
         
         # Render/Local binding
-        port = int(os.environ.get("PORT", 5002))
+        port = int(os.environ.get("PORT", 5003))
         print(f">>> DATA: Attempting to bind SocketIO to 0.0.0.0:{port}...", flush=True)
         socketio.run(app, host='0.0.0.0', port=port, debug=False)
     except Exception as e:
