@@ -328,6 +328,13 @@ def panic_button():
     engine.close_all_positions()
     return jsonify({"message": "PÁNICO ACTIVADO: Todas las posiciones cerradas"})
 
+@app.route('/api/trading/auto_symbols', methods=['POST'])
+def update_auto_symbols():
+    data = request.json
+    symbols = data.get('symbols', [])
+    engine.auto_symbols = [s for s in symbols if s in engine.symbols]
+    return jsonify({"status": "success", "auto_symbols": engine.auto_symbols})
+
 @app.route('/api/watchlist')
 def get_watchlist():
     return jsonify({"watchlist": engine.get_watchlist()})

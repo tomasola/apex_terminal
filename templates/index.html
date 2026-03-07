@@ -253,7 +253,8 @@
                 <div
                     style="font-size: 7px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; letter-spacing: 1px;">
                     LISTA SEGUIMIENTO</div>
-                <div id="watchlist-items">
+                <div id="watchlist-items"
+                    style="max-height: 250px; overflow-y: auto; overflow-x: hidden; padding-right: 2px;">
                     <!-- Dynamic Items -->
                 </div>
             </div>
@@ -1466,19 +1467,38 @@
                 if (xhr.readyState === 4 && xhr.status === 200) {
                     var data = JSON.parse(xhr.responseText);
                     var html = "";
-                    data.watchlist.forEach(function (item) {
+                    data.watchlist.forEach(function (item, index) {
                         var color = item.change >= 0 ? "var(--green)" : "var(--red)";
                         var sign = item.change >= 0 ? "+" : "";
-                        html += '<div class="watchlist-item" onclick="switchAsset(\'' + item.symbol + '\')">' +
-                            '<span class="sym">' + item.symbol.split('/')[0] + '</span>' +
-                            '<span class="prc">$' + item.price.toLocaleString() + '</span>' +
-                            '<span class="chg" style="color:' + color + '">' + sign + item.change + '%</span>' +
+                        var isChecked = item.is_auto ? "checked" : "";
+                        var cb = '<input type="checkbox" class="auto-cb" value="' + item.symbol + '" ' + isChecked + ' onclick="event.stopPropagation(); toggleAutoTrade()" style="margin-right:8px; cursor:pointer;" title="Activar Auto-Trading para esta moneda">';
+                        html += '<div class="watchlist-item" onclick="switchAsset(\'' + item.symbol + '\')" style="margin-bottom:2px;">' +
+                            '<div style="display:flex; align-items:center;">' + cb + '<span class="sym" style="font-size:10px;">' + item.symbol.split('/')[0] + '</span></div>' +
+                            '<div style="display:flex; justify-content:flex-end; gap:8px; flex-grow:1;"><span class="prc" style="font-size:10px;">$' + item.price.toLocaleString() + '</span>' +
+                            '<span class="chg" style="color:' + color + '; font-size:10px; width:35px; text-align:right;">' + sign + item.change + '%</span></div>' +
                             '</div>';
                     });
                     document.getElementById('watchlist-items').innerHTML = html;
                 }
             };
             xhr.send();
+        }
+
+        function toggleAutoTrade() {
+            var checked = [];
+            document.querySelectorAll('.auto-cb').forEach(function (c) {
+                if (c.checked) checked.push(c.value);
+            });
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "/api/trading/auto_symbols", true);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    showToast("Símbolos de Auto-Trading actualizados", "buy");
+                    liveUpdate();
+                }
+            };
+            xhr.send(JSON.stringify({ symbols: checked }));
         }
 
         function switchAsset(sym) {
