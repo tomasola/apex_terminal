@@ -24,9 +24,10 @@ class TradeEngine:
             
         self.symbols = [
             'BTC/USDC', 'ETH/USDC', 'SOL/USDC', 'BNB/USDC', 'XRP/USDC', 
-            'ADA/USDC', 'DOGE/USDC', 'DOT/USDC', 'MATIC/USDC', 'LINK/USDC',
+            'ADA/USDC', 'DOGE/USDC', 'DOT/USDC', 'POL/USDC', 'LINK/USDC',
             'AVAX/USDC', 'UNI/USDC', 'LTC/USDC', 'BCH/USDC'
         ]
+        self.auto_symbols = self.symbols[:] # Initially all enabled
         self.timeframes = ['1m', '5m', '15m', '1h', '1d']
         
         # Trading State
@@ -257,6 +258,9 @@ class TradeEngine:
 
     def execute_trade_logic(self, symbol, signal, price):
         if self.trading_mode == "OFF":
+            return
+            
+        if symbol not in self.auto_symbols:
             return
 
         # Check for open position
@@ -506,7 +510,7 @@ class TradeEngine:
                 self.save_history()
 
     def get_watchlist(self):
-        symbols = ['BTC/USDC', 'ETH/USDC', 'SOL/USDC', 'BNB/USDC', 'XRP/USDC']
+        symbols = self.symbols
         watchlist = []
         try:
             tickers = self.exchange.fetch_tickers(symbols)
@@ -516,7 +520,8 @@ class TradeEngine:
                     watchlist.append({
                         'symbol': s,
                         'price': t['last'],
-                        'change': round(t.get('percentage', 0), 2)
+                        'change': round(t.get('percentage', 0), 2),
+                        'is_auto': s in self.auto_symbols
                     })
         except Exception as e:
             logging.error(f"Watchlist error: {e}")
