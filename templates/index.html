@@ -726,6 +726,7 @@
                             <th style="padding: 8px;">TF</th>
                             <th style="padding: 8px;">Modo</th>
                             <th style="padding: 8px;">Hora</th>
+                            <th style="padding: 8px;">Inversión (USDC)</th>
                             <th style="padding: 8px;">Entrada</th>
                             <th style="padding: 8px;">Actual</th>
                             <th style="padding: 8px;">PnL (%)</th>
@@ -1605,13 +1606,16 @@
                         row.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
 
                         var pnlColor = p.pnl_pct >= 0 ? 'var(--green)' : 'var(--red)';
+                        var usdcInvested = (p.qty && p.entry_price) ? (p.qty * p.entry_price).toFixed(2) : '---';
+
                         row.innerHTML =
                             '<td style="padding: 8px;">' + p.symbol + '</td>' +
                             '<td style="padding: 8px;">' + (p.tf || '---') + '</td>' +
                             '<td style="padding: 8px;">' + p.mode + '</td>' +
                             '<td style="padding: 8px; color:var(--text-muted);">' + (p.entry_time || '---') + '</td>' +
-                            '<td style="padding: 8px;">' + p.entry_price.toFixed(2) + '</td>' +
-                            '<td style="padding: 8px;">' + (p.current_price ? p.current_price.toFixed(2) : '---') + '</td>' +
+                            '<td style="padding: 8px;">$' + usdcInvested + '</td>' +
+                            '<td style="padding: 8px;">' + p.entry_price.toFixed(4) + '</td>' +
+                            '<td style="padding: 8px;">' + (p.current_price ? p.current_price.toFixed(4) : '---') + '</td>' +
                             '<td style="padding: 8px; color:' + pnlColor + ';">' + (p.pnl_pct !== undefined ? p.pnl_pct + '%' : '---') + '</td>' +
                             '<td style="padding: 8px; font-weight:bold; color:var(--accent-blue);">ABIERTA</td>';
                         activeBody.appendChild(row);
