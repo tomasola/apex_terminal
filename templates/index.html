@@ -1377,9 +1377,16 @@
             xhr.open("POST", "/api/trading/params", true);
             xhr.setRequestHeader("Content-Type", "application/json");
             xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    if (!isSilent) showToast("Configuración aplicada correctamente", "buy");
-                    update(); // Refresh with new signals
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        if (!isSilent) showToast("Configuración aplicada correctamente", "buy");
+                        update(); // Refresh with new signals
+                    } else if (xhr.status === 401) {
+                        showToast("Sesión expirada. Recargando página para hacer Login...", "sell");
+                        setTimeout(() => window.location.reload(), 1500);
+                    } else {
+                        if (!isSilent) showToast("Error de conexión al aplicar configuración", "sell");
+                    }
                 }
             };
             xhr.send(JSON.stringify(params));
@@ -1456,18 +1463,25 @@
             xhr.open("POST", "/api/trading/mode", true);
             xhr.setRequestHeader("Content-Type", "application/json");
             xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    var btns = ['OFF', 'SIM', 'REAL'];
-                    btns.forEach(function (b) {
-                        var btn = document.getElementById('btn-' + b.toLowerCase());
-                        var isActive = (b === mode);
-                        btn.style.background = isActive ? (b === 'REAL' ? 'var(--red)' : (b === 'SIM' ? 'var(--green)' : '#444')) : '#131722';
-                        btn.style.color = isActive ? 'white' : 'var(--text-muted)';
-                        btn.style.borderColor = isActive ? 'white' : '#2a2e39';
-                        btn.style.fontWeight = isActive ? 'bold' : 'normal';
-                    });
-                    document.getElementById('trading-status').querySelector('span').innerText = mode;
-                    document.getElementById('trading-status').querySelector('span').style.color = (mode === 'REAL' ? 'var(--red)' : (mode === 'SIM' ? 'var(--green)' : 'var(--text-muted)'));
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        var btns = ['OFF', 'SIM', 'REAL'];
+                        btns.forEach(function (b) {
+                            var btn = document.getElementById('btn-' + b.toLowerCase());
+                            var isActive = (b === mode);
+                            btn.style.background = isActive ? (b === 'REAL' ? 'var(--red)' : (b === 'SIM' ? 'var(--green)' : '#444')) : '#131722';
+                            btn.style.color = isActive ? 'white' : 'var(--text-muted)';
+                            btn.style.borderColor = isActive ? 'white' : '#2a2e39';
+                            btn.style.fontWeight = isActive ? 'bold' : 'normal';
+                        });
+                        document.getElementById('trading-status').querySelector('span').innerText = mode;
+                        document.getElementById('trading-status').querySelector('span').style.color = (mode === 'REAL' ? 'var(--red)' : (mode === 'SIM' ? 'var(--green)' : 'var(--text-muted)'));
+                    } else if (xhr.status === 401) {
+                        showToast("Sesión expirada. Recargando página para hacer Login...", "sell");
+                        setTimeout(() => window.location.reload(), 1500);
+                    } else {
+                        showToast("Error de conexión con el Servidor", "sell");
+                    }
                 }
             };
             xhr.send(JSON.stringify({ mode: mode }));
@@ -1479,14 +1493,22 @@
             xhr.setRequestHeader("Content-Type", "application/json");
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4) {
-                    var data = JSON.parse(xhr.responseText);
                     if (xhr.status === 200) {
+                        var data = JSON.parse(xhr.responseText);
                         showToast(data.message, action.toLowerCase() === 'buy' ? 'buy' : 'sell');
                         playAlert();
                         updateTradeHistory();
                         updateBalance();
+                    } else if (xhr.status === 401) {
+                        showToast("Sesión expirada. Recargando página para hacer Login...", "sell");
+                        setTimeout(() => window.location.reload(), 1500);
                     } else {
-                        showToast("ERROR: " + data.message, "sell");
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            showToast("ERROR: " + data.message, "sell");
+                        } catch (e) {
+                            showToast("Error de conexión al enviar orden manual", "sell");
+                        }
                     }
                 }
             };
@@ -1526,9 +1548,16 @@
             xhr.open("POST", "/api/trading/auto_symbols", true);
             xhr.setRequestHeader("Content-Type", "application/json");
             xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    showToast("Símbolos de Auto-Trading actualizados", "buy");
-                    liveUpdate();
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        showToast("Símbolos de Auto-Trading actualizados", "buy");
+                        liveUpdate();
+                    } else if (xhr.status === 401) {
+                        showToast("Sesión expirada. Recargando página para hacer Login...", "sell");
+                        setTimeout(() => window.location.reload(), 1500);
+                    } else {
+                        showToast("Error de conexión al actualizar Símbolos Auto-Trading", "sell");
+                    }
                 }
             };
             xhr.send(JSON.stringify({ symbols: checked }));
