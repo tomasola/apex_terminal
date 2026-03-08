@@ -296,7 +296,8 @@ body {
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
     body {
-        overflow-y: auto; /* Allow scrolling on full page */
+        overflow-y: auto;
+        /* Allow scrolling on full page */
     }
 
     .app-container {
@@ -309,7 +310,8 @@ body {
         border-right: none;
         border-bottom: 1px solid var(--border-glass);
         height: auto;
-        max-height: 40vh; /* Sidebar takes some space top */
+        max-height: 40vh;
+        /* Sidebar takes some space top */
         overflow-y: auto;
     }
 
@@ -335,7 +337,8 @@ body {
 
     #pane-1,
     #pane-2 {
-        height: 300px; /* Fixed height for charts on mobile */
+        height: 300px;
+        /* Fixed height for charts on mobile */
         grid-column: 1;
     }
 
@@ -365,10 +368,40 @@ body {
     }
 
     table {
-        min-width: 600px; /* Force minimum width to trigger scroll */
+        min-width: 600px;
+        /* Force minimum width to trigger scroll */
+    }
+
+    /* Target specific tables to increase readability on mobile */
+    th,
+    td {
+        font-size: 12px !important;
+        padding: 12px 10px !important;
+        /* Bigger tap targets and better text spacing */
     }
 
     #strategy-box {
         height: auto !important;
+    }
+
+    /* Increase overall typography for mobile */
+    .tf-btn {
+        font-size: 15px !important;
+        padding: 8px 16px !important;
+    }
+
+    .mini-tf-btn {
+        font-size: 12px !important;
+        padding: 4px 8px !important;
+    }
+
+    .logo {
+        font-size: 1.5rem !important;
+    }
+
+    /* Target inline styles overriding with important */
+    #watchlist-items div {
+        font-size: 14px !important;
+        padding: 10px 0 !important;
     }
 }
