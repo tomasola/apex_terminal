@@ -5,6 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>APEX Terminal</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#131722">
+    <link rel="apple-touch-icon" href="/icon-192.png">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2.4">
 
     <!-- Robust Library Loading - Pinned to v4.1.1 -->
@@ -248,6 +251,12 @@
     <div class="app-container">
         <aside class="sidebar">
             <div class="logo" style="margin-bottom: 5px;">APEX</div>
+
+            <!-- Install App Button (hidden by default, shown by JS when PWA is ready) -->
+            <button id="pwa-install-btn" onclick="installPWA()"
+                style="display: none; background: var(--green); color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 15px; width: 100%; box-shadow: 0 4px 10px rgba(38, 166, 154, 0.3);">
+                📲 Instalar App (Móvil)
+            </button>
 
             <div class="watchlist">
                 <div
@@ -1841,6 +1850,40 @@
                 }
             };
             xhr.send();
+        }
+
+        // PWA Setup
+        var deferredPrompt;
+        window.addEventListener('beforeinstallprompt', function (e) {
+            e.preventDefault();
+            deferredPrompt = e;
+            var installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) installBtn.style.display = 'block';
+        });
+
+        function installPWA() {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then(function (choiceResult) {
+                if (choiceResult.outcome === 'accepted') {
+                    console.log('User accepted the PWA prompt');
+                    var installBtn = document.getElementById('pwa-install-btn');
+                    if (installBtn) installBtn.style.display = 'none';
+                } else {
+                    console.log('User dismissed the PWA prompt');
+                }
+                deferredPrompt = null;
+            });
+        }
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('/sw.js').then(function (registration) {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, function (err) {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
         }
 
         window.onload = function () {

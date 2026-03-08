@@ -12,7 +12,7 @@ print(">>> DATA: APEX Terminal starting up... (forced flush)", flush=True)
 
 try:
     print(">>> Importing flask...", flush=True)
-    from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+    from flask import Flask, render_template, jsonify, request, session, redirect, url_for, send_from_directory
     
     print(">>> Importing flask_socketio...", flush=True)
     from flask_socketio import SocketIO, emit
@@ -177,6 +177,18 @@ def logout():
 @login_required
 def index():
     return render_template('index.html')
+
+@app.route('/sw.js')
+def serve_sw():
+    return send_from_directory('static', 'sw.js')
+
+@app.route('/manifest.json')
+def serve_manifest():
+    return send_from_directory('static', 'manifest.json')
+
+@app.route('/icon-192.png')
+def serve_icon():
+    return send_from_directory('static', 'icon-192.png')
 
 @app.route('/api/status')
 @login_required

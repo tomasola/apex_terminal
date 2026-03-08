@@ -1,0 +1,22 @@
+{
+    "name": "APEX Terminal",
+    "short_name": "APEX",
+    "description": "Terminal de Trading Algorítmico",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#131722",
+    "theme_color": "#131722",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "/icon-192.png",
+            "type": "image/png",
+            "sizes": "192x192"
+        },
+        {
+            "src": "/icon-192.png",
+            "type": "image/png",
+            "sizes": "512x512"
+        }
+    ]
+}
