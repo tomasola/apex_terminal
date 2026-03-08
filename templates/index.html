@@ -1525,24 +1525,60 @@
             updateTFUI(currentTF, idx);
         }
 
-        function jumpToTrade(timestamp) {
+        function visualizeTrade(trade, isActive) {
             if (!series.candles) return;
 
-            // Convert timestamp to seconds if it's in ms (Binance sometimes uses ms)
-            if (timestamp > 9999999999) timestamp = Math.floor(timestamp / 1000);
+            var entryTimestamp = trade.entry_timestamp;
+            if (entryTimestamp > 9999999999) entryTimestamp = Math.floor(entryTimestamp / 1000);
 
-            // Calculate a buffer of about 20 candles based on typical timeframe
-            // 1h = 3600s, 15m = 900s, 5m = 300s
+            // Buffer for chart centering
             var buffer = 3600 * 20;
             if (currentTimeframe.includes('m')) buffer = parseInt(currentTimeframe) * 60 * 20;
             if (currentTimeframe.includes('d')) buffer = 86400 * 20;
 
-            charts.price.timeScale().setVisibleRange({
-                from: timestamp - buffer,
-                to: timestamp + buffer
+            // Generate Markers
+            var markers = [];
+
+            // Entry Marker
+            markers.push({
+                time: entryTimestamp,
+                position: 'belowBar',
+                color: '#26a69a', // Green
+                shape: 'arrowUp',
+                text: 'ENTRADA @ ' + trade.entry_price.toFixed(4)
             });
 
-            showToast("Saltando a la operación en el gráfico...", "buy");
+            // Exit Marker (if not active)
+            if (!isActive && trade.exit_timestamp) {
+                var exitTimestamp = trade.exit_timestamp;
+                if (exitTimestamp > 9999999999) exitTimestamp = Math.floor(exitTimestamp / 1000);
+
+                var isWin = trade.pnl_pct >= 0;
+                markers.push({
+                    time: exitTimestamp,
+                    position: 'aboveBar',
+                    color: isWin ? '#26a69a' : '#ef5350', // Green if Win, Red if Loss
+                    shape: 'arrowDown',
+                    text: 'SALIDA (' + trade.pnl_pct.toFixed(2) + '%)'
+                });
+
+                // Adjust view range to see both
+                charts.price.timeScale().setVisibleRange({
+                    from: Math.min(entryTimestamp, exitTimestamp) - buffer,
+                    to: Math.max(entryTimestamp, exitTimestamp) + buffer
+                });
+            } else {
+                // Just center on Entry
+                charts.price.timeScale().setVisibleRange({
+                    from: entryTimestamp - buffer,
+                    to: entryTimestamp + buffer
+                });
+            }
+
+            // Apply Markers to the candlestick series
+            series.candles.setMarkers(markers);
+
+            showToast("Visualizando operación en el gráfico...", "buy");
         }
 
         function runBacktest() {
@@ -1604,6 +1640,15 @@
                         var row = document.createElement('tr');
                         row.style.background = "rgba(41, 98, 255, 0.05)";
                         row.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+                        row.style.cursor = "pointer";
+                        row.title = "Clic para ver entrada en el gráfico";
+
+                        row.onclick = function () {
+                            if (p.symbol !== currentSymbol) {
+                                switchAsset(p.symbol);
+                            }
+                            visualizeTrade(p, true);
+                        };
 
                         var pnlColor = p.pnl_pct >= 0 ? 'var(--green)' : 'var(--red)';
                         var usdcInvested = (p.qty && p.entry_price) ? (p.qty * p.entry_price).toFixed(2) : '---';
@@ -1641,7 +1686,7 @@
                             if (t.symbol !== currentSymbol) {
                                 switchAsset(t.symbol);
                             }
-                            jumpToTrade(t.entry_timestamp);
+                            visualizeTrade(t, false);
                         };
 
                         var pnlColor = t.pnl_pct >= 0 ? 'var(--green)' : 'var(--red)';
