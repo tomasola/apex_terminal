@@ -24,8 +24,8 @@ class TradeEngine:
             
         self.symbols = [
             'BTC/USDC', 'ETH/USDC', 'SOL/USDC', 'BNB/USDC', 'XRP/USDC', 
-            'ADA/USDC', 'DOGE/USDC', 'DOT/USDC', 'POL/USDC', 'LINK/USDC',
-            'AVAX/USDC', 'UNI/USDC', 'LTC/USDC', 'BCH/USDC'
+            'ADA/USDC', 'DOT/USDC', 'POL/USDC', 'LINK/USDC',
+            'UNI/USDC', 'LTC/USDC', 'BCH/USDC'
         ]
         self.auto_symbols = self.symbols[:] # Initially all enabled
         self.timeframes = ['1m', '5m', '15m', '1h', '1d']
