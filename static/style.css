@@ -417,4 +417,61 @@ body {
         font-size: 18px !important;
         padding: 14px 0 !important;
     }
+
+    /* Target specific Sidebar Controls (Options, Auto Trade, Capital, Diagnostic) */
+    .tab-btn {
+        font-size: 14px !important;
+        padding: 12px 4px !important;
+    }
+
+    .sidebar label {
+        font-size: 12px !important;
+    }
+
+    .sidebar input,
+    .sidebar select {
+        font-size: 16px !important;
+        padding: 8px !important;
+    }
+
+    /* Section Headers */
+    .glass-pane>div:first-child,
+    .sidebar div[style*="font-weight: bold"][style*="uppercase"] {
+        font-size: 16px !important;
+        padding-top: 10px !important;
+        padding-bottom: 10px !important;
+    }
+
+    /* Data points & Balance */
+    #real-balance {
+        font-size: 28px !important;
+    }
+
+    #win-rate,
+    #daily-pnl {
+        font-size: 20px !important;
+    }
+
+    #trading-status {
+        font-size: 16px !important;
+        margin-top: 10px !important;
+    }
+
+    #btn-off,
+    #btn-sim,
+    #btn-real {
+        font-size: 15px !important;
+        padding: 12px !important;
+    }
+
+    /* Diagnostics Area */
+    .diag-item {
+        font-size: 15px !important;
+        margin-bottom: 8px !important;
+        padding: 4px 0 !important;
+    }
+
+    .diag-item span {
+        font-size: 15px !important;
+    }
 }
