@@ -1265,24 +1265,47 @@
                                 document.getElementById('gauge-needle').style.left = data.sentiment + "%";
                             }
 
-                            // Update Live Status Banner
+                            // Update Live Status Banner and Trading Mode Buttons
                             if (data.bot_status) {
                                 var banner = document.getElementById('live-status-banner');
                                 banner.innerText = "BOT STATUS: " + data.bot_status.toUpperCase();
 
+                                var currentMode = "OFF";
                                 // Dynamic colors based on mode
                                 if (data.bot_status.indexOf("REAL") !== -1) {
+                                    currentMode = "REAL";
                                     banner.style.color = "var(--red)";
                                     banner.style.borderColor = "var(--red)";
                                     banner.style.background = "rgba(239, 83, 80, 0.1)";
                                 } else if (data.bot_status.indexOf("SIM") !== -1) {
+                                    currentMode = "SIM";
                                     banner.style.color = "var(--green)";
                                     banner.style.borderColor = "var(--green)";
                                     banner.style.background = "rgba(38, 166, 154, 0.1)";
                                 } else {
+                                    currentMode = "OFF";
                                     banner.style.color = "var(--text-muted)";
                                     banner.style.borderColor = "#333";
                                     banner.style.background = "rgba(0,0,0,0.2)";
+                                }
+
+                                // Sync buttons
+                                var btns = ['OFF', 'SIM', 'REAL'];
+                                btns.forEach(function (b) {
+                                    var btn = document.getElementById('btn-' + b.toLowerCase());
+                                    if (btn) {
+                                        var isActive = (b === currentMode);
+                                        btn.style.background = isActive ? (b === 'REAL' ? 'var(--red)' : (b === 'SIM' ? 'var(--green)' : '#444')) : '#131722';
+                                        btn.style.color = isActive ? 'white' : 'var(--text-muted)';
+                                        btn.style.borderColor = isActive ? 'white' : '#2a2e39';
+                                        btn.style.fontWeight = isActive ? 'bold' : 'normal';
+                                    }
+                                });
+
+                                var statusSpan = document.getElementById('trading-status').querySelector('span');
+                                if (statusSpan) {
+                                    statusSpan.innerText = currentMode;
+                                    statusSpan.style.color = (currentMode === 'REAL' ? 'var(--red)' : (currentMode === 'SIM' ? 'var(--green)' : 'var(--text-muted)'));
                                 }
                             }
 
