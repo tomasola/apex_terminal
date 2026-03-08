@@ -388,8 +388,8 @@ body {
     /* Target specific tables to increase readability on mobile */
     th,
     td {
-        font-size: 12px !important;
-        padding: 12px 10px !important;
+        font-size: 14px !important;
+        padding: 14px 12px !important;
         /* Bigger tap targets and better text spacing */
     }
 
