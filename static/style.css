@@ -415,7 +415,7 @@ body {
     /* Target inline styles overriding with important */
     #watchlist-items div {
         font-size: 24px !important;
-        padding: 18px 0 !important;
+        padding: 8px 0 !important;
     }
 
     .watchlist>div:first-child {
