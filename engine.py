@@ -425,8 +425,8 @@ class TradeEngine:
         """Returns a human-readable string of what the bot is currently doing."""
         if self.trading_mode == "OFF":
             return "ESPERA: Trading APAGADO"
-            
-        status = f"MODO: {self.trading_mode} | ESTRAT: {self.params.get('active_strategy', 1)}"
+        tf = self.params.get('trading_timeframe', '1h')
+        status = f"MODO: {self.trading_mode} | ESTRAT: {self.params.get('active_strategy', 1)} | TF: {tf}"
         
         if self.active_positions:
             symbols = ", ".join(self.active_positions.keys())

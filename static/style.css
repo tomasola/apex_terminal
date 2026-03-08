@@ -474,4 +474,23 @@ body {
     .diag-item span {
         font-size: 15px !important;
     }
+
+    /* Move Bot Status to the very top as a header */
+    #live-status-banner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        z-index: 9999;
+        text-align: center;
+        border-radius: 0 !important;
+        font-size: 14px !important;
+        padding: 12px !important;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .app-container {
+        padding-top: 45px;
+        /* Offset for the fixed banner */
+    }
 }
