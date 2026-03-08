@@ -1528,7 +1528,12 @@
         function visualizeTrade(trade, isActive) {
             if (!series.candles) return;
 
-            var entryTimestamp = trade.entry_timestamp;
+            var entryTimestamp = trade.entry_timestamp || trade.exit_timestamp;
+            if (!entryTimestamp) {
+                showToast("Esta operación antigua no tiene datos de tiempo para la gráfica", "sell");
+                return;
+            }
+
             if (entryTimestamp > 9999999999) entryTimestamp = Math.floor(entryTimestamp / 1000);
 
             // Buffer for chart centering
@@ -1539,14 +1544,16 @@
             // Generate Markers
             var markers = [];
 
-            // Entry Marker
-            markers.push({
-                time: entryTimestamp,
-                position: 'belowBar',
-                color: '#26a69a', // Green
-                shape: 'arrowUp',
-                text: 'ENTRADA @ ' + trade.entry_price.toFixed(4)
-            });
+            // Entry Marker (Only plot if we actually had an entry_timestamp)
+            if (trade.entry_timestamp) {
+                markers.push({
+                    time: entryTimestamp,
+                    position: 'belowBar',
+                    color: '#26a69a', // Green
+                    shape: 'arrowUp',
+                    text: 'ENTRADA @ ' + trade.entry_price.toFixed(4)
+                });
+            }
 
             // Exit Marker (if not active)
             if (!isActive && trade.exit_timestamp) {
@@ -1562,10 +1569,13 @@
                     text: 'SALIDA (' + trade.pnl_pct.toFixed(2) + '%)'
                 });
 
-                // Adjust view range to see both
+                // Adjust view range to see both, or just center around the single marker if entry is missing
+                var minTime = trade.entry_timestamp ? Math.min(entryTimestamp, exitTimestamp) : exitTimestamp;
+                var maxTime = trade.entry_timestamp ? Math.max(entryTimestamp, exitTimestamp) : exitTimestamp;
+
                 charts.price.timeScale().setVisibleRange({
-                    from: Math.min(entryTimestamp, exitTimestamp) - buffer,
-                    to: Math.max(entryTimestamp, exitTimestamp) + buffer
+                    from: minTime - buffer,
+                    to: maxTime + buffer
                 });
             } else {
                 // Just center on Entry
@@ -1576,9 +1586,12 @@
             }
 
             // Apply Markers to the candlestick series
-            series.candles.setMarkers(markers);
-
-            showToast("Visualizando operación en el gráfico...", "buy");
+            try {
+                series.candles.setMarkers(markers);
+                showToast("Visualizando operación en el gráfico...", "buy");
+            } catch (e) {
+                console.error("Marker Error:", e);
+            }
         }
 
         function runBacktest() {

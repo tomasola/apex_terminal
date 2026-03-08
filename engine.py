@@ -352,6 +352,7 @@ class TradeEngine:
             'pnl_val': round(pnl_val, 2),
             'pnl_pct': round(pnl_pct, 2),
             'entry_time': pos['entry_time'],
+            'entry_timestamp': pos.get('entry_timestamp', 0),
             'exit_time': time.strftime('%H:%M:%S'),
             'exit_timestamp': int(time.time()), # Added for daily PnL calculation
             'status': 'WIN' if pnl_pct > 0 else 'LOSS'
