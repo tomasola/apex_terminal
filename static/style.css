@@ -292,3 +292,83 @@ body {
 #diag-hud:hover {
     opacity: 1;
 }
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    body {
+        overflow-y: auto; /* Allow scrolling on full page */
+    }
+
+    .app-container {
+        display: flex;
+        flex-direction: column;
+        height: auto;
+    }
+
+    .sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border-glass);
+        height: auto;
+        max-height: 40vh; /* Sidebar takes some space top */
+        overflow-y: auto;
+    }
+
+    .main-content {
+        height: auto;
+        min-height: 100vh;
+        overflow-x: hidden;
+    }
+
+    .top-bar {
+        flex-direction: column;
+        height: auto;
+        padding: 10px;
+        gap: 10px;
+    }
+
+    .charts-grid,
+    .charts-grid.split {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+        height: auto;
+    }
+
+    #pane-1,
+    #pane-2 {
+        height: 300px; /* Fixed height for charts on mobile */
+        grid-column: 1;
+    }
+
+    #pane-2 {
+        grid-row: 2;
+    }
+
+    .panes-indicators {
+        grid-template-columns: 1fr;
+    }
+
+    .indicator-pane {
+        border-right: none;
+        border-bottom: 1px solid var(--border-glass);
+    }
+
+    .indicator-group {
+        grid-template-columns: 1fr;
+    }
+
+    /* Make tables scrollable horizontally so data isn't squished */
+    #active-positions-body,
+    #trade-history-body {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    table {
+        min-width: 600px; /* Force minimum width to trigger scroll */
+    }
+
+    #strategy-box {
+        height: auto !important;
+    }
+}
