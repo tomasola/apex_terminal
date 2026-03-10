@@ -317,19 +317,19 @@
                         </div>
                         <div>
                             <label style="display: block; font-size: 8px; color: var(--text-muted);">K Per</label>
-                            <input type="number" id="st_k" value="14"
+                            <input type="number" id="st_k" value="10"
                                 style="width: 100%; background: #131722; border: 1px solid #2a2e39; color: white; border-radius: 2px; padding: 2px; font-size: 10px;">
                         </div>
                         <div>
                             <label style="display: block; font-size: 8px; color: var(--text-muted);">Smth</label>
-                            <input type="number" id="st_smooth" value="3"
+                            <input type="number" id="st_smooth" value="2"
                                 style="width: 100%; background: #131722; border: 1px solid #2a2e39; color: white; border-radius: 2px; padding: 2px; font-size: 10px;">
                         </div>
                     </div>
 
                     <div style="margin-bottom: 0;">
                         <label style="display: block; font-size: 8px; color: var(--text-muted);">ST Factor</label>
-                        <input type="number" id="st_factor" value="3.0" step="0.5"
+                        <input type="number" id="st_factor" value="10.0" step="1.0"
                             style="width: 100%; background: #131722; border: 1px solid #2a2e39; color: white; border-radius: 2px; padding: 2px; font-size: 10px;">
                     </div>
                 </div>
@@ -394,7 +394,7 @@
                         style="font-size: 8px; color: var(--accent-blue); font-weight: bold; margin-bottom: 8px; opacity: 0.7;">
                         DYNAMIC RSI & STOCH (OPT 4)</div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 6px;">
                         <div>
                             <label style="display: block; font-size: 8px; color: var(--text-muted);">RSI Fast</label>
                             <input type="number" id="rsi_fast_4" value="5"
@@ -408,39 +408,29 @@
                     </div>
 
                     <!-- RSI Slider -->
-                    <div style="margin-bottom: 8px;">
+                    <div style="margin-bottom: 6px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <label style="font-size: 8px; color: var(--text-muted);">RSI Threshold Offset (0-25)</label>
+                            <label style="font-size: 8px; color: var(--text-muted);">RSI Offset (0-25)</label>
                             <span id="rsi_offset_val" style="font-size: 9px; color: white; font-weight: bold;">0</span>
                         </div>
                         <input type="range" id="rsi_offset" min="0" max="25" value="0" step="1"
                             oninput="document.getElementById('rsi_offset_val').innerText = this.value; liveUpdate();"
                             style="width: 100%; height: 4px; background: #2a2e39; border-radius: 2px; cursor: pointer; accent-color: var(--accent-blue);">
-                        <div
-                            style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-muted); margin-top: 2px;">
-                            <span>Sell < -Off</span>
-                                    <span>Buy > +Off</span>
-                        </div>
                     </div>
 
                     <!-- Stoch Slider -->
-                    <div style="margin-bottom: 10px;">
+                    <div style="margin-bottom: 8px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <label style="font-size: 8px; color: var(--text-muted);">Stoch Range Offset (0-50)</label>
+                            <label style="font-size: 8px; color: var(--text-muted);">Stoch Offset (0-50)</label>
                             <span id="stoch_offset_val"
                                 style="font-size: 9px; color: white; font-weight: bold;">30</span>
                         </div>
                         <input type="range" id="stoch_offset" min="0" max="50" value="30" step="1"
                             oninput="document.getElementById('stoch_offset_val').innerText = this.value; liveUpdate();"
                             style="width: 100%; height: 4px; background: #2a2e39; border-radius: 2px; cursor: pointer; accent-color: var(--accent-pink);">
-                        <div
-                            style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-muted); margin-top: 2px;">
-                            <span>Buy < 20</span>
-                                    <span>Sell > 80</span>
-                        </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
                         <div>
                             <label style="display: block; font-size: 8px; color: var(--text-muted);">Stoch L</label>
                             <input type="number" id="st_len_4" value="14"
@@ -451,6 +441,56 @@
                             <input type="number" id="st_factor_4" value="3.0" step="0.5"
                                 style="width: 100%; background: #131722; border: 1px solid #2a2e39; color: white; border-radius: 2px; padding: 2px; font-size: 10px;">
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Signal Diagnostic (Confluence) - MOVED UP -->
+            <div id="diagnostic-pane" class="glass-pane"
+                style="background: rgba(41, 98, 255, 0.03); padding: 10px; margin-bottom: 10px; display: none; border: 1px solid rgba(41, 98, 255, 0.2);">
+                <div
+                    style="font-size: 9px; color: var(--accent-blue); font-weight: bold; text-transform: uppercase; margin-bottom: 6px;">
+                    🔍 Diagnóstico de Señal</div>
+
+                <div id="diag-buy" style="margin-bottom: 6px;">
+                    <div
+                        style="font-size: 8px; color: var(--green); margin-bottom: 3px; border-bottom: 1px solid rgba(0,255,0,0.1);">
+                        FILTROS DE COMPRA</div>
+                    <div class="diag-item" id="buy-trend"
+                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
+                        <span>Tendencia Alcista</span>
+                        <span class="status">❌</span>
+                    </div>
+                    <div class="diag-item" id="buy-stoch"
+                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
+                        <span>Sobrec. (Stoch)</span>
+                        <span class="status">❌</span>
+                    </div>
+                    <div class="diag-item" id="buy-rsi"
+                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
+                        <span>RSI Div (C)</span>
+                        <span class="status">❌</span>
+                    </div>
+                </div>
+
+                <div id="diag-sell">
+                    <div
+                        style="font-size: 8px; color: var(--red); margin-bottom: 3px; border-bottom: 1px solid rgba(255,0,0,0.1);">
+                        FILTROS DE VENTA</div>
+                    <div class="diag-item" id="sell-trend"
+                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
+                        <span>Tendencia Bajista</span>
+                        <span class="status">❌</span>
+                    </div>
+                    <div class="diag-item" id="sell-stoch"
+                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
+                        <span>Sobrec. (Stoch)</span>
+                        <span class="status">❌</span>
+                    </div>
+                    <div class="diag-item" id="sell-rsi"
+                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
+                        <span>RSI Div (V)</span>
+                        <span class="status">❌</span>
                     </div>
                 </div>
             </div>
@@ -506,12 +546,12 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px;">
                     <div
                         style="background: rgba(38, 166, 154, 0.05); padding: 6px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.03);">
-                        <div style="font-size: 7px; color: var(--text-muted);">TASA EXITO</div>
+                        <div style="font-size: 7px; color: var(--text-muted);">TASA EXITO (TOTAL)</div>
                         <div id="win-rate" style="font-size: 11px; font-weight: bold; color: var(--green);">0%</div>
                     </div>
                     <div
                         style="background: rgba(255, 255, 255, 0.03); padding: 6px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.03);">
-                        <div style="font-size: 7px; color: var(--text-muted);">PNL DIARIO</div>
+                        <div style="font-size: 7px; color: var(--text-muted);">PNL TOTAL (USDC)</div>
                         <div id="daily-pnl" style="font-size: 11px; font-weight: bold; color: white;">$0.00</div>
                     </div>
                 </div>
@@ -563,55 +603,7 @@
             </div>
 
 
-            <!-- Signal Diagnostic (Confluence) -->
-            <div id="diagnostic-pane" class="glass-pane"
-                style="background: rgba(41, 98, 255, 0.03); padding: 10px; margin-bottom: 10px; display: none;">
-                <div
-                    style="font-size: 9px; color: var(--accent-blue); font-weight: bold; text-transform: uppercase; margin-bottom: 8px;">
-                    🔍 Diagnóstico de Señal</div>
 
-                <div id="diag-buy" style="margin-bottom: 8px;">
-                    <div
-                        style="font-size: 8px; color: var(--green); margin-bottom: 4px; border-bottom: 1px solid rgba(0,255,0,0.1);">
-                        FILTROS DE COMPRA</div>
-                    <div class="diag-item" id="buy-trend"
-                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
-                        <span>Tendencia Alcista</span>
-                        <span class="status">❌</span>
-                    </div>
-                    <div class="diag-item" id="buy-stoch"
-                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
-                        <span>Sobrec. (Stoch)</span>
-                        <span class="status">❌</span>
-                    </div>
-                    <div class="diag-item" id="buy-rsi"
-                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
-                        <span>RSI Div (C)</span>
-                        <span class="status">❌</span>
-                    </div>
-                </div>
-
-                <div id="diag-sell">
-                    <div
-                        style="font-size: 8px; color: var(--red); margin-bottom: 4px; border-bottom: 1px solid rgba(255,0,0,0.1);">
-                        FILTROS DE VENTA</div>
-                    <div class="diag-item" id="sell-trend"
-                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
-                        <span>Tendencia Bajista</span>
-                        <span class="status">❌</span>
-                    </div>
-                    <div class="diag-item" id="sell-stoch"
-                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
-                        <span>Sobrecom. (Stoch)</span>
-                        <span class="status">❌</span>
-                    </div>
-                    <div class="diag-item" id="sell-rsi"
-                        style="font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 2px;">
-                        <span>RSI Div (V)</span>
-                        <span class="status">❌</span>
-                    </div>
-                </div>
-            </div>
 
 
             <div id="symbol-list"></div>
@@ -795,6 +787,10 @@
         var currentSymbol2 = "ETH/USDC";
         var currentTimeframe2 = "1h";
         var focusedChart = 1;
+
+        // Auto-fit flags to prevent annoying jumps when updating data
+        var needsFit1 = true;
+        var needsFit2 = true;
 
         // Legacy/Compat aliases for existing functions if needed
         var currentSymbol = currentSymbol1;
@@ -1020,18 +1016,51 @@
                 charts.rsi = LightweightCharts.createChart(rCont, {
                     layout: { background: { type: 'solid', color: '#131722' }, textColor: '#d1d4dc', fontSize: 10 },
                     grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
-                    width: rCont.clientWidth, height: 150
+                    width: rCont.clientWidth, height: 250
                 });
-                series.rsi = charts.rsi.addLineSeries({ color: '#2962ff', lineWidth: 2 });
+                // Force scale to include -20 to 20
+                var rsiBounds = charts.rsi.addLineSeries({ color: 'transparent', lastValueVisible: false, priceLineVisible: false });
+                rsiBounds.setData([{ time: 0, value: -20 }, { time: 4000000000, value: 20 }]);
 
+                series.rsi = charts.rsi.addBaselineSeries({
+                    baseValue: { type: 'price', price: 0 },
+                    topLineColor: '#14c79a',
+                    topFillColor1: 'rgba(20, 199, 154, 0.28)',
+                    topFillColor2: 'rgba(20, 199, 154, 0.05)',
+                    bottomLineColor: '#e42c69',
+                    bottomFillColor1: 'rgba(228, 44, 105, 0.05)',
+                    bottomFillColor2: 'rgba(228, 44, 105, 0.28)',
+                    lineWidth: 2
+                });
                 var sCont = document.getElementById('c-stoch');
                 charts.stoch = LightweightCharts.createChart(sCont, {
                     layout: { background: { type: 'solid', color: '#131722' }, textColor: '#d1d4dc', fontSize: 10 },
                     grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
-                    width: sCont.clientWidth, height: 150
+                    width: sCont.clientWidth, height: 250
                 });
-                series.st_k = charts.stoch.addLineSeries({ color: '#f06292', lineWidth: 1.5 });
-                series.st_trend = charts.stoch.addLineSeries({ color: '#ef5350', lineStyle: 2, lineWidth: 1 });
+                // Force scale to include 0 to 100
+                var stochBounds = charts.stoch.addLineSeries({ color: 'transparent', lastValueVisible: false, priceLineVisible: false });
+                stochBounds.setData([{ time: 0, value: 0 }, { time: 4000000000, value: 100 }]);
+
+                series.st_bg_red = charts.stoch.addAreaSeries({ lineColor: 'transparent', topColor: 'rgba(228, 44, 105, 0.15)', bottomColor: 'rgba(228, 44, 105, 0.15)', lineWidth: 0 });
+                series.st_bg_green = charts.stoch.addAreaSeries({ lineColor: 'transparent', topColor: 'rgba(20, 199, 154, 0.20)', bottomColor: 'rgba(20, 199, 154, 0.20)', lineWidth: 0 });
+
+                // Add 50 Baseline
+                series.st_baseline = charts.stoch.addLineSeries({ color: 'gray', lineWidth: 1, lineStyle: 2 });
+                series.st_baseline.setData([{ time: 0, value: 50 }, { time: 4000000000, value: 50 }]); // Dummy data just to show the line or use PriceLine
+
+                series.st_baseline.createPriceLine({
+                    price: 50,
+                    color: 'rgba(255, 255, 255, 0.3)',
+                    lineWidth: 1,
+                    lineStyle: 2,
+                    axisLabelVisible: false,
+                    title: '50'
+                });
+
+                series.st_k = charts.stoch.addLineSeries({ color: '#d1d4dc', lineWidth: 2 }); // Solid white/gray line like Pine Script
+                series.st_trend_up = charts.stoch.addLineSeries({ color: '#14c79a', lineWidth: 2, lineStyle: 0 }); // Solid green
+                series.st_trend_dn = charts.stoch.addLineSeries({ color: '#e42c69', lineWidth: 2, lineStyle: 0 }); // Solid red
 
                 // Group 2: EMA Diff
                 var eCont = document.getElementById('c-ema-diff');
@@ -1138,6 +1167,10 @@
             fetch(url).then(r => r.json()).then(data => {
                 if (data.candles) {
                     series.candles2.setData(data.candles);
+                    if (needsFit2) {
+                        charts.price2.timeScale().fitContent();
+                        needsFit2 = false;
+                    }
                     document.getElementById('title-2').innerText = currentSymbol2;
                 }
             }).catch(err => console.error("Update2 Fail:", err));
@@ -1148,9 +1181,11 @@
             if (chartIdx === 1) {
                 currentTimeframe1 = tf;
                 currentTimeframe = tf; // Legacy support
+                needsFit1 = true;
                 update();
             } else {
                 currentTimeframe2 = tf;
+                needsFit2 = true;
                 update2();
             }
             updateTFUI(tf, chartIdx);
@@ -1223,8 +1258,15 @@
                             // Contextual data based on strategy (Main Chart only for now)
                             if (activeStrategy === 1 || activeStrategy === 4) {
                                 if (data.rsi_div) series.rsi.setData(data.rsi_div);
-                                if (data.stoch_rsi) series.st_k.setData(data.stoch_rsi);
-                                if (data.st_trend) series.st_trend.setData(data.st_trend);
+                                if (data.stoch_k) {
+                                    var bgRed = data.stoch_k.map(function (d) { return { time: d.time, value: 100 }; });
+                                    var bgGreen = data.stoch_k.map(function (d) { return { time: d.time, value: 50 }; });
+                                    if (series.st_bg_red) series.st_bg_red.setData(bgRed);
+                                    if (series.st_bg_green) series.st_bg_green.setData(bgGreen);
+                                    series.st_k.setData(data.stoch_k);
+                                }
+                                if (data.trend_up) series.st_trend_up.setData(data.trend_up);
+                                if (data.trend_dn) series.st_trend_dn.setData(data.trend_dn);
                             } else if (activeStrategy === 2) {
                                 if (data.ema_f) series.ema_f.setData(data.ema_f);
                                 if (data.ema_s) series.ema_s.setData(data.ema_s);
@@ -1253,7 +1295,10 @@
                             if (series.rsi) series.rsi.setMarkers(markers);
                             if (series.st_k) series.st_k.setMarkers(markers);
 
-                            charts.price.timeScale().fitContent();
+                            if (needsFit1) {
+                                charts.price.timeScale().fitContent();
+                                needsFit1 = false;
+                            }
                             document.getElementById('title-1').innerText = currentSymbol1;
 
                             updateTradeHistory();
@@ -1422,11 +1467,11 @@
         }
 
         function updatePriceLines() {
-            if (!series.rsi || !series.st_k) return;
+            if (!series.rsi || !series.st_baseline) return;
 
             // Clear old lines
             rsiLines.forEach(function (l) { try { series.rsi.removePriceLine(l); } catch (e) { } });
-            stochLines.forEach(function (l) { try { series.st_k.removePriceLine(l); } catch (e) { } });
+            stochLines.forEach(function (l) { try { series.st_baseline.removePriceLine(l); } catch (e) { } });
             rsiLines = [];
             stochLines = [];
 
@@ -1450,10 +1495,10 @@
             var sBuy = 50 - stochOff;
             var sSell = 50 + stochOff;
 
-            stochLines.push(series.st_k.createPriceLine({
+            stochLines.push(series.st_baseline.createPriceLine({
                 price: sBuy, color: '#26a69a', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'BUY < ' + sBuy
             }));
-            stochLines.push(series.st_k.createPriceLine({
+            stochLines.push(series.st_baseline.createPriceLine({
                 price: sSell, color: '#ef5350', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'SELL > ' + sSell
             }));
         }
@@ -1567,9 +1612,11 @@
             if (focusedChart === 1) {
                 currentSymbol1 = sym;
                 currentSymbol = sym; // Legacy
+                needsFit1 = true;
                 update();
             } else {
                 currentSymbol2 = sym;
+                needsFit2 = true;
                 update2();
             }
             // Update global header to show current focused symbol

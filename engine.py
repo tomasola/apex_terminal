@@ -25,9 +25,10 @@ class TradeEngine:
         self.symbols = [
             'BTC/USDC', 'ETH/USDC', 'SOL/USDC', 'BNB/USDC', 'XRP/USDC', 
             'ADA/USDC', 'DOT/USDC', 'POL/USDC', 'LINK/USDC',
-            'UNI/USDC', 'LTC/USDC', 'BCH/USDC'
+            'UNI/USDC', 'LTC/USDC', 'BCH/USDC', 'SUI/USDC',
+            'HBAR/USDC', 'XLM/USDC'
         ]
-        self.auto_symbols = self.symbols[:] # Initially all enabled
+        self.auto_symbols = [s for s in self.symbols if s != 'BNB/USDC'] # Default: all enabled except BNB
         self.timeframes = ['1m', '5m', '15m', '1h', '1d']
         
         # Trading State
@@ -56,9 +57,9 @@ class TradeEngine:
             'rsi_fast': 5,
             'rsi_slow': 14,
             'stoch_rsi_len': 14,
-            'stoch_k_period': 14,
-            'stoch_smooth_k': 3,
-            'st_factor': 3.0,
+            'stoch_k_period': 10,
+            'stoch_smooth_k': 2,
+            'st_factor': 10.0,
             'investment_amount': 20.0,
             'trading_timeframe': '1h',
             'stop_loss_pct': 5.0,
@@ -163,20 +164,28 @@ class TradeEngine:
         if rsi_div is not None:
             for i in range(len(rsi_div)):
                 val = rsi_div.iloc[i]
-                rsi_data.append({'time': int(timestamps[i]), 'value': float(val) if not pd.isna(val) else 0.0})
+                v = float(val) if not pd.isna(val) else 0.0
+                c = '#00ff00' if v > 0 else '#ff0000' # Lime if > 0 else Red
+                rsi_data.append({'time': int(timestamps[i]), 'value': v, 'color': c})
             
-        stoch_data = []
-        trend_data = []
-        if stoch_k is not None:
+        stoch_k_data = []
+        trend_up = []
+        trend_dn = []
+
+        if stoch_k is not None and st_dir is not None and st_trend is not None:
             for i in range(len(stoch_k)):
-                k_val = stoch_k.iloc[i]
-                stoch_data.append({'time': int(timestamps[i]), 'value': float(k_val) if not pd.isna(k_val) else 0.0})
-        
-        if st_trend is not None:
-            for i in range(len(st_trend)):
-                t_val = st_trend.iloc[i]
-                trend_data.append({'time': int(timestamps[i]), 'value': float(t_val) if not pd.isna(t_val) else 0.0})
-            
+                k_val = float(stoch_k.iloc[i]) if not pd.isna(stoch_k.iloc[i]) else 0.0
+                t_val = float(st_trend.iloc[i]) if not pd.isna(st_trend.iloc[i]) else 0.0
+                d_val = st_dir.iloc[i]
+                
+                # K is a single continuous solid line in Pine Script
+                stoch_k_data.append({'time': int(timestamps[i]), 'value': k_val})
+
+                # Split trend based on direction (-1 = UP, 1 = DOWN)
+                if d_val == -1:
+                    trend_up.append({'time': int(timestamps[i]), 'value': t_val})
+                else:
+                    trend_dn.append({'time': int(timestamps[i]), 'value': t_val})
         signal_markers = []
         if st_signals is not None:
             for i in range(len(st_signals)):
@@ -223,8 +232,9 @@ class TradeEngine:
         hist = self.history[symbol][timeframe]
         hist['candles'] = candles
         hist['rsi_div'] = rsi_data
-        hist['stoch_rsi'] = stoch_data
-        hist['st_trend'] = trend_data
+        hist['stoch_k'] = stoch_k_data
+        hist['trend_up'] = trend_up
+        hist['trend_dn'] = trend_dn
         hist['signals'] = signal_markers
         hist['sentiment'] = sentiment # Add sentiment to history
         
@@ -386,15 +396,13 @@ class TradeEngine:
         return True, msg
 
     def get_trade_history(self):
-        # Calculate total performance
+        # Calculate total performance summary
         total_pnl = sum([t['pnl_pct'] for t in self.trade_history])
         wins = [t for t in self.trade_history if t.get('pnl_pct', 0) > 0]
         win_rate = (len(wins) / len(self.trade_history) * 100) if self.trade_history else 0
         
-        # Calculate Daily PnL (approximate for last 24h)
-        now_ts = time.time()
-        daily_trades = [t for t in self.trade_history if now_ts - t.get('exit_timestamp', 0) < 86400]
-        daily_pnl = sum([t.get('pnl_pct', 0) for t in daily_trades])
+        # Calculate Total PnL in USDC (replacing old Daily PnL logic)
+        total_pnl_usdc = sum([t.get('pnl_val', 0) for t in self.trade_history])
 
         # Prepare profit curve data
         balance = 1000.0 # Virtual starting balance for curve
@@ -413,7 +421,7 @@ class TradeEngine:
         return {
             'history': self.trade_history[::-1], # Newest first
             'total_pnl': round(total_pnl, 2),
-            'daily_pnl': round(daily_pnl, 2),
+            'daily_pnl': round(total_pnl_usdc, 2), # Still using key 'daily_pnl' for frontend compatibility
             'win_rate': round(win_rate, 1),
             'profit_curve': profit_curve,
             'trades_count': len(self.trade_history),
