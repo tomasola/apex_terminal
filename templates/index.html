@@ -1292,6 +1292,7 @@
                                 }
                             }
                             series.candles.setMarkers(markers);
+                            if (markers.length > 0) console.log("Chart 1: Rendering " + markers.length + " signal markers.");
                             if (series.rsi) series.rsi.setMarkers(markers);
                             if (series.st_k) series.st_k.setMarkers(markers);
 

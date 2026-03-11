@@ -193,10 +193,10 @@ class TradeEngine:
                     signal_markers.append({
                         'time': int(timestamps[i]),
                         'position': 'belowBar' if st_signals.iloc[i] == 'BUY' else 'aboveBar',
-                        'color': '#14c79a' if st_signals.iloc[i] == 'BUY' else '#e42c69',
+                        'color': '#26a69a' if st_signals.iloc[i] == 'BUY' else '#ef5350', # Better Teal/Red
                         'shape': 'arrowUp' if st_signals.iloc[i] == 'BUY' else 'arrowDown',
                         'text': st_signals.iloc[i],
-                        'size': 2
+                        'size': 4 # Size increased for visibility
                     })
         
         # Sentiment Scoring (0 to 100)
@@ -229,13 +229,23 @@ class TradeEngine:
         # Clamp sentiment
         sentiment = max(0, min(100, sentiment))
 
+        # Prepare Raw Markers for Indicator charts (less strict)
+        raw_markers = []
+        if isinstance(st_signals, pd.Series):
+             # Extract raw trend flips from supertrend dir if possible
+             # For now, let's just use the st_signals from the strategy (already contains some signals)
+             # But if we want more, we can use Supertrend flips.
+             # Actually, let's just use the same markers for now but ensure they are available for subcharts.
+             pass
+
         hist = self.history[symbol][timeframe]
         hist['candles'] = candles
         hist['rsi_div'] = rsi_data
         hist['stoch_k'] = stoch_k_data
         hist['trend_up'] = trend_up
         hist['trend_dn'] = trend_dn
-        hist['signals'] = signal_markers
+        hist['signals'] = signal_markers # These are the strict confluence markers
+        hist['raw_signals'] = signal_markers # Legacy or for future use
         hist['sentiment'] = sentiment # Add sentiment to history
         
         # Get latest values Safely for Stats
