@@ -1339,13 +1339,18 @@
                                     });
                                 }
                             }
-                            series.candles.setMarkers(markers);
-                            if (markers.length > 0) console.log("Chart 1: Rendering " + markers.length + " signal markers.");
-                            var smallMarkers = markers.map(function(m) {
-                                return Object.assign({}, m, { size: 1 }); // Size 1 for indicators
-                            });
-                            if (series.rsi) series.rsi.setMarkers(smallMarkers);
-                            if (series.st_k) series.st_k.setMarkers(smallMarkers);
+                            try {
+                                if (series.candles) series.candles.setMarkers(markers);
+                                if (markers.length > 0) console.log("Chart 1: Rendering " + markers.length + " signal markers.");
+                            } catch (err) { console.error("Candle Markers Error:", err); }
+
+                            try {
+                                var smallMarkers = markers.map(function(m) {
+                                    return Object.assign({}, m, { size: 1 }); // Size 1 for indicators
+                                });
+                                if (series.rsi) series.rsi.setMarkers(smallMarkers);
+                                if (series.st_k) series.st_k.setMarkers(smallMarkers);
+                            } catch (err) { console.error("Indicator Markers Error:", err); }
 
                             if (needsFit1) {
                                 charts.price.timeScale().fitContent();
