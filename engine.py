@@ -9,25 +9,52 @@ import requests
 import datetime
 from indicators import calculate_rsi_divergence, calculate_stochastic_supertrend, calculate_macd, calculate_adx, calculate_ema, calculate_rsi, calculate_bollinger_bands
 class TradeEngine:
-    def __init__(self, api_key, api_secret, testnet=True):
-        self.exchange = ccxt.binance({
+    def __init__(self, api_key, api_secret, exchange_id='binance', testnet=True, passphrase=None):
+        self.exchange_id = exchange_id
+        
+        exchange_class = getattr(ccxt, exchange_id)
+        
+        # Base config
+        config = {
             'apiKey': api_key,
             'secret': api_secret,
             'enableRateLimit': True,
             'options': {
-                'defaultType': 'spot',
                 'adjustForTimeDifference': True
             }
-        })
+        }
+        
+        if passphrase:
+            config['password'] = passphrase
+        
+        # Exchange specific defaults
+        if exchange_id == 'binance':
+            config['options']['defaultType'] = 'spot'
+        elif exchange_id == 'okx':
+            config['options']['defaultType'] = 'swap' # Perpetuals
+            
+        self.exchange = exchange_class(config)
+        
         if testnet:
             self.exchange.set_sandbox_mode(True)
             
-        self.symbols = [
-            'BTC/USDC', 'ETH/USDC', 'SOL/USDC', 'BNB/USDC', 'XRP/USDC', 
-            'ADA/USDC', 'DOT/USDC', 'POL/USDC', 'LINK/USDC',
-            'UNI/USDC', 'LTC/USDC', 'BCH/USDC', 'SUI/USDC',
-            'HBAR/USDC', 'XLM/USDC'
-        ]
+        # Default Symbols per exchange
+        if exchange_id == 'binance':
+            self.symbols = [
+                'BTC/USDC', 'ETH/USDC', 'SOL/USDC', 'BNB/USDC', 'XRP/USDC', 
+                'ADA/USDC', 'DOT/USDC', 'POL/USDC', 'LINK/USDC',
+                'UNI/USDC', 'LTC/USDC', 'BCH/USDC', 'SUI/USDC',
+                'HBAR/USDC', 'XLM/USDC'
+            ]
+        elif exchange_id == 'okx':
+            # OKX Futures often use USDT or USDC margin. For consistency, let's use USDT based swaps.
+            self.symbols = [
+                'BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT', 'BNB/USDT:USDT', 
+                'XRP/USDT:USDT', 'ADA/USDT:USDT', 'DOT/USDT:USDT', 'MATIC/USDT:USDT',
+                'LINK/USDT:USDT', 'UNI/USDT:USDT', 'LTC/USDT:USDT', 'AVAX/USDT:USDT'
+            ]
+        else:
+            self.symbols = []
         self.auto_symbols = [s for s in self.symbols if s != 'BNB/USDC'] # Default: all enabled except BNB
         self.timeframes = ['1m', '5m', '15m', '1h', '1d']
         
@@ -78,7 +105,8 @@ class TradeEngine:
             'rsi_offset': 0,
             'st_len_4': 14,
             'st_factor_4': 3.0,
-            'stoch_offset': 30
+            'stoch_offset': 30,
+            'leverage': 1
         }
 
     def send_telegram(self, msg):
@@ -94,14 +122,26 @@ class TradeEngine:
 
     def fetch_ohlcv(self, symbol, timeframe='1h', limit=250):
         try:
+            # Some symbols might need conversion if we use them in multiple contexts
             ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df.set_index('timestamp', inplace=True)
             return df
         except Exception as e:
-            logging.error(f"Error fetching OHLCV for {symbol} ({timeframe}): {e}")
+            logging.error(f"Error fetching OHLCV for {symbol} on {self.exchange_id} ({timeframe}): {e}")
             return None
+
+    def set_leverage(self, symbol, leverage):
+        if self.exchange_id != 'okx':
+            return # Only for futures
+        try:
+            self.exchange.set_leverage(leverage, symbol)
+            logging.info(f"Leverage set to {leverage}x for {symbol} on {self.exchange_id}")
+            return True
+        except Exception as e:
+            logging.error(f"Error setting leverage: {e}")
+            return False
 
     def analyze(self, symbol, timeframe='1h'):
         df = self.fetch_ohlcv(symbol, timeframe)
@@ -196,7 +236,7 @@ class TradeEngine:
                         'color': '#26a69a' if st_signals.iloc[i] == 'BUY' else '#ef5350', # Better Teal/Red
                         'shape': 'arrowUp' if st_signals.iloc[i] == 'BUY' else 'arrowDown',
                         'text': st_signals.iloc[i],
-                        'size': 4 # Size increased for visibility
+                        'size': 6 # Increased size for better visibility
                     })
         
         # Sentiment Scoring (0 to 100)
@@ -457,23 +497,35 @@ class TradeEngine:
     def get_balance(self):
         try:
             balance = self.exchange.fetch_balance()
-            # Total = Spot (free) + Earn (Flexible Savings usually starts with LD)
-            usdc_spot = balance.get('USDC', {}).get('free', 0.0)
-            usdc_earn = balance.get('LDUSDC', {}).get('total', 0.0)
+            total = 0.0
+            currency = 'USDC'
             
-            total = usdc_spot + usdc_earn
-            
-            # Fallback to USDT if USDC is completely 0 (for diagnostics)
-            if total == 0:
-                usdt_spot = balance.get('USDT', {}).get('free', 0.0)
-                if usdt_spot > 0:
-                    logging.info(f"USDC is 0, but found {usdt_spot} USDT. User might need to swap.")
-                    return round(usdt_spot, 2)
-            
-            return round(total, 2)
+            if self.exchange_id == 'binance':
+                usdc_spot = balance.get('USDC', {}).get('total', 0.0)
+                usdc_earn = balance.get('LDUSDC', {}).get('total', 0.0)
+                total = usdc_spot + usdc_earn
+                if total == 0:
+                    total = balance.get('USDT', {}).get('total', 0.0)
+                    currency = 'USDT'
+            elif self.exchange_id == 'okx':
+                # OKX Swap balance is usually under 'total' if it's a unified account
+                total = balance.get('info', {}).get('data', [{}])[0].get('totalEq', 0.0)
+                if not total:
+                    # Fallback for standard CCXT balance format
+                    total = balance.get('USDT', {}).get('total', 0.0)
+                    currency = 'USDT'
+                else:
+                    total = float(total)
+                    currency = 'USDT (Eq)'
+
+            return {
+                'total': round(total, 2),
+                'currency': currency,
+                'leverage': self.params.get('leverage', 1)
+            }
         except Exception as e:
-            logging.error(f"Error fetching balance from Binance: {e}")
-            return 0.0
+            logging.error(f"Error fetching balance from {self.exchange_id}: {e}")
+            return {'total': 0.0, 'currency': 'N/A', 'leverage': 1}
 
     def check_risk_management(self):
         sl_threshold = float(self.params.get('stop_loss_pct', 5.0))
@@ -644,12 +696,16 @@ class TradeEngine:
                 }
             }
 
-            # Create synchronized signals for visualization
             sync_signals = pd.Series("", index=df.index)
             for i in range(len(df)):
-                if st_signals.iloc[i] == "BUY" and rsi_div.iloc[i] > 0:
+                # Relaxed: Check if either current or previous candle has RSI confluence
+                # This makes signals more frequent as RSI doesn't have to align perfectly on one bar
+                curr_rsi = rsi_div.iloc[i]
+                prev_rsi = rsi_div.iloc[i-1] if i > 0 else 0.0
+                
+                if st_signals.iloc[i] == "BUY" and (curr_rsi > 0 or prev_rsi > 0):
                     sync_signals.iloc[i] = "BUY"
-                elif st_signals.iloc[i] == "SELL" and rsi_div.iloc[i] < 0:
+                elif st_signals.iloc[i] == "SELL" and (curr_rsi < 0 or prev_rsi < 0):
                     sync_signals.iloc[i] = "SELL"
 
             data = {
@@ -710,6 +766,7 @@ class TradeEngine:
             st_len = int(self.params.get('st_len_4', 14))
             st_fact = float(self.params.get('st_factor_4', 3.0))
             stoch_off = float(self.params.get('stoch_offset', 30))
+            pullback_pct = float(self.params.get('pullback_pct_4', 0.0))
             
             # Indicators
             rsi_div = calculate_rsi_divergence(df, rsi_fast, rsi_slow)
@@ -730,6 +787,18 @@ class TradeEngine:
             # Track if we already gave a signal for the current Supertrend segment
             signaled_in_current_trend = False
             
+            # Pullback tracking
+            peak_price_ob = 0.0
+            in_overbought = False
+            valley_price_os = 0.0
+            in_oversold = False
+            
+            # RSI Pullback state tracking
+            rsi_peak = 0.0
+            rsi_ob = False
+            rsi_valley = 0.0
+            rsi_os = False
+            
             for i in range(1, len(df)):
                 s_dir = st_dir.iloc[i]
                 prev_s_dir = st_dir.iloc[i-1]
@@ -738,21 +807,102 @@ class TradeEngine:
                 if s_dir != prev_s_dir:
                     signaled_in_current_trend = False
                 
-                if signaled_in_current_trend:
-                    continue
-                    
+                
                 s_k = stoch_k.iloc[i]
                 r_div = rsi_div.iloc[i]
+                current_high = df['high'].iloc[i]
+                current_low = df['low'].iloc[i]
+                current_close = df['close'].iloc[i]
+                
+                pullback_buy_triggered = False
+                pullback_sell_triggered = False
+
+                # Pullback tracking
+                if pullback_pct > 0:
+                    # OVERBOUGHT (SELL PULLBACK)
+                    if s_k > stoch_sell_thr:
+                        if not in_overbought:
+                            in_overbought = True
+                            peak_price_ob = current_high
+                        else:
+                            peak_price_ob = max(peak_price_ob, current_high)
+                    elif s_k < 50:
+                        # Reset tracking if stoch drops below mid
+                        in_overbought = False
+                        peak_price_ob = 0.0
+                        
+                    # OVERSOLD (BUY PULLBACK)
+                    if s_k < stoch_buy_thr:
+                        if not in_oversold:
+                            in_oversold = True
+                            valley_price_os = current_low
+                        else:
+                            valley_price_os = min(valley_price_os, current_low)
+                    elif s_k > 50:
+                        in_oversold = False
+                        valley_price_os = 0.0
+
+                    if in_overbought and peak_price_ob > 0:
+                        if current_close <= peak_price_ob * (1 - pullback_pct / 100.0):
+                            pullback_sell_triggered = True
+
+                    if in_oversold and valley_price_os > 0:
+                        if current_close >= valley_price_os * (1 + pullback_pct / 100.0):
+                            pullback_buy_triggered = True
+
+                    # RSI DIVERGENCE PULLBACK (SAME SLIDER)
+                    # Sell side: RSI Divergence below -offset
+                    if r_div < -rsi_off:
+                        if not rsi_ob:
+                            rsi_ob = True
+                            rsi_peak = current_high
+                        else:
+                            rsi_peak = max(rsi_peak, current_high)
+                    elif r_div > 0:
+                        rsi_ob = False
+                        rsi_peak = 0.0
+
+                    if rsi_ob and rsi_peak > 0:
+                        if current_close <= rsi_peak * (1 - pullback_pct / 100.0):
+                            pullback_sell_triggered = True
+
+                    # Buy side: RSI Divergence above offset
+                    if r_div > rsi_off:
+                        if not rsi_os:
+                            rsi_os = True
+                            rsi_valley = current_low
+                        else:
+                            rsi_valley = min(rsi_valley, current_low)
+                    elif r_div < 0:
+                        rsi_os = False
+                        rsi_valley = 0.0
+
+                    if rsi_os and rsi_valley > 0:
+                        if current_close >= rsi_valley * (1 + pullback_pct / 100.0):
+                            pullback_buy_triggered = True
+
+                if signaled_in_current_trend and not (pullback_buy_triggered or pullback_sell_triggered):
+                    continue
                 
                 # BUY CONDITION: Trend is UP (-1) AND Stoch K < BuyThr AND RSI Div > Offset
-                if s_dir == -1 and s_k < stoch_buy_thr and r_div > rsi_off:
-                    conf_signals.iloc[i] = "BUY"
-                    signaled_in_current_trend = True
+                if pullback_buy_triggered or (s_dir == -1 and s_k < stoch_buy_thr and r_div > rsi_off):
+                    if not signaled_in_current_trend:
+                        conf_signals.iloc[i] = "BUY"
+                        signaled_in_current_trend = True
+                        in_oversold = False
+                        valley_price_os = 0.0
+                        rsi_os = False
+                        rsi_valley = 0.0
                 
                 # SELL CONDITION: Trend is DOWN (1) AND Stoch K > SellThr AND RSI Div < -Offset
-                elif s_dir == 1 and s_k > stoch_sell_thr and r_div < -rsi_off:
+                elif pullback_sell_triggered or (s_dir == 1 and s_k > stoch_sell_thr and r_div < -rsi_off):
                     conf_signals.iloc[i] = "SELL"
                     signaled_in_current_trend = True
+                    # Reset pullback states
+                    in_overbought = False
+                    peak_price_ob = 0.0
+                    rsi_ob = False
+                    rsi_peak = 0.0
             
             # Latest Signal for execution
             signal = conf_signals.iloc[-1]
@@ -776,7 +926,8 @@ class TradeEngine:
                 'params': {
                     'stoch_buy_thr': round(stoch_buy_thr, 1),
                     'stoch_sell_thr': round(stoch_sell_thr, 1),
-                    'rsi_off': round(rsi_off, 2)
+                    'rsi_off': round(rsi_off, 2),
+                    'pullback_pct': round(pullback_pct, 2)
                 }
             }
                 

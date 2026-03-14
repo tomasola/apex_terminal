@@ -86,14 +86,29 @@ def add_header(response):
     response.headers['Expires'] = '-1'
     return response
 
-# Credenciales (Cargadas desde .env o variables de entorno)
-API_KEY = os.environ.get("BINANCE_API_KEY")
-API_SECRET = os.environ.get("BINANCE_API_SECRET")
+# Binance Credentials
+BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY")
+BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET")
 
-if not API_KEY or not API_SECRET:
-    logging.warning("⚠️ API Keys no encontradas. El bot no podrá operar en REAL.")
+# OKX Credentials
+OKX_API_KEY = os.environ.get("OKX_API_KEY")
+OKX_API_SECRET = os.environ.get("OKX_API_SECRET")
+OKX_PASSPHRASE = os.environ.get("OKX_PASSPHRASE")
 
-engine = TradeEngine(API_KEY, API_SECRET, testnet=False)
+engines = {}
+if BINANCE_API_KEY and BINANCE_API_SECRET:
+    engines['binance'] = TradeEngine(BINANCE_API_KEY, BINANCE_API_SECRET, exchange_id='binance', testnet=False)
+if OKX_API_KEY and OKX_API_SECRET:
+    engines['okx'] = TradeEngine(OKX_API_KEY, OKX_API_SECRET, exchange_id='okx', testnet=False, passphrase=OKX_PASSPHRASE)
+
+if not engines:
+    logging.warning("⚠️ No se encontraron API Keys válidas. El bot operará en modo limitado.")
+
+# Fallback engine for endpoints that don't specify one
+def get_engine(engine_id=None):
+    if not engine_id:
+        return next(iter(engines.values())) if engines else None
+    return engines.get(engine_id)
 
 # Track last errors for diagnostics
 last_errors = []
@@ -101,7 +116,11 @@ last_errors = []
 def bot_loop():
     while True:
         try:
-            engine.run_cycle()
+            for eng_id, engine in engines.items():
+                try:
+                    engine.run_cycle()
+                except Exception as e:
+                    logging.error(f"Error in {eng_id} cycle: {e}")
             time.sleep(30)
         except Exception as e:
             err_msg = f"Loop error: {e}"
@@ -114,16 +133,21 @@ def stream_updates():
     """Background task to broadcast real-time prices via WebSocket."""
     while True:
         try:
-            updates = {}
-            for symbol in engine.symbols:
-                ticker = engine.exchange.fetch_ticker(symbol)
-                updates[symbol] = {
-                    'price': ticker['last'],
-                    'timestamp': int(time.time()),
-                }
+            full_updates = {}
+            for eng_id, engine in engines.items():
+                updates = {}
+                for symbol in engine.symbols:
+                    try:
+                        ticker = engine.exchange.fetch_ticker(symbol)
+                        updates[symbol] = {
+                            'price': ticker['last'],
+                            'timestamp': int(time.time()),
+                        }
+                    except: continue
+                full_updates[eng_id] = updates
             
-            socketio.emit('price_update', updates)
-            # Sleep a bit to avoid hitting rate limits too hard, but keep it snappy
+            if full_updates:
+                socketio.emit('price_update', full_updates)
             time.sleep(2) 
         except Exception as e:
             err_msg = f"Streaming error: {e}"
@@ -135,6 +159,8 @@ def stream_updates():
 @app.route('/api/diagnostics')
 @login_required
 def diagnostics():
+    engine = get_engine(request.args.get('engine_id'))
+    if not engine: return jsonify({"status": "error", "message": "No engine found"}), 404
     return jsonify({
         "status": "online",
         "last_errors": last_errors,
@@ -195,8 +221,11 @@ def serve_icon():
 @app.route('/api/status')
 @login_required
 def status():
+    eng_id = request.args.get('engine_id')
+    engine = get_engine(eng_id)
+    if not engine: return jsonify({"status": "error", "message": "Engine not found"}), 404
+    
     tf = request.args.get('tf', '1h')
-    # Devolver las stats filtradas por el timeframe solicitado
     filtered_stats = {}
     for symbol in engine.current_stats:
         if tf in engine.current_stats[symbol]:
@@ -205,54 +234,49 @@ def status():
     return jsonify({
         'stats': filtered_stats,
         'symbols': engine.symbols,
-        'bot_status': engine.get_bot_status()
+        'bot_status': engine.get_bot_status(),
+        'exchange': engine.exchange_id
     })
 
 @app.route('/api/trading/history')
 @login_required
 def api_get_trading_history_v2():
     try:
-        # Get base history and stats from engine
-        data = engine.get_trade_history()
+        engine = get_engine(request.args.get('engine_id'))
+        if not engine: return jsonify({"status": "error", "message": "Engine not found"}), 404
         
-        # Enrich active positions with current price for live PnL
+        data = engine.get_trade_history()
         active_with_prices = {}
-        # Use copy() to avoid threading issues during iteration
         active_positions_snapshot = engine.active_positions.copy()
         
         for symbol, pos in active_positions_snapshot.items():
             enriched = pos.copy()
             tf = engine.params.get('trading_timeframe', '1h')
-            # Check current_stats threadsafety too
             current_stats_snapshot = engine.current_stats.get(symbol, {}).get(tf, {})
             
             enriched['tf'] = tf
             curr_price = current_stats_snapshot.get('price')
             enriched['current_price'] = curr_price
             if curr_price:
-                # Use entry_price from the position item
                 entry_price = enriched.get('entry_price', 0)
                 if entry_price > 0:
                     enriched['pnl_pct'] = round((curr_price - entry_price) / entry_price * 100, 2)
             active_with_prices[symbol] = enriched
 
-        # Merge enriched data into response
         data['active_positions'] = active_with_prices
         return jsonify(data)
     except Exception as e:
-        import traceback
-        err_msg = traceback.format_exc()
         logging.error(f"Error in /api/trading/history: {e}")
-        with open("api_error.log", "w") as f:
-            f.write(err_msg)
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/api/trading/params', methods=['POST']) # Corrected endpoint name to match index.html
+@app.route('/api/trading/params', methods=['POST'])
 @login_required
 def update_params():
     try:
         data = request.json
-        # Map frontend names to engine names
+        engine = get_engine(data.get('engine_id'))
+        if not engine: return jsonify({"status": "error", "message": "Engine not found"}), 404
+        
         engine.params['rsi_fast'] = int(data.get('rsi_fast', engine.params['rsi_fast']))
         engine.params['rsi_slow'] = int(data.get('rsi_slow', engine.params['rsi_slow']))
         engine.params['stoch_rsi_len'] = int(data.get('stoch_rsi_len', engine.params['stoch_rsi_len']))
@@ -277,12 +301,10 @@ def update_params():
         engine.params['rsi_fast_4'] = int(data.get('rsi_fast_4', 5))
         engine.params['rsi_slow_4'] = int(data.get('rsi_slow_4', 14))
         engine.params['rsi_offset'] = float(data.get('rsi_offset', 0))
-        engine.params['st_len_4'] = int(data.get('st_len_4', 14))
-        engine.params['st_factor_4'] = float(data.get('st_factor_4', 3.0))
         engine.params['stoch_offset'] = float(data.get('stoch_offset', 30))
+        engine.params['pullback_pct_4'] = float(data.get('pullback_pct_4', 0.0))
         
-        logging.info(f"PARAMS UPDATED: {engine.params}")
-        # Force a cycle to apply changes immediately
+        logging.info(f"PARAMS UPDATED for {engine.exchange_id}: {engine.params}")
         engine.run_cycle()
         return jsonify({"status": "success", "params": engine.params})
     except Exception as e:
@@ -293,10 +315,13 @@ def update_params():
 @login_required
 def set_trading_mode():
     data = request.json
+    engine = get_engine(data.get('engine_id'))
+    if not engine: return jsonify({"status": "error", "message": "Engine not found"}), 404
+    
     mode = data.get('mode')
     if mode in ['OFF', 'SIM', 'REAL']:
         engine.trading_mode = mode
-        logging.info(f"Trading mode set to: {mode}")
+        logging.info(f"Trading mode for {engine.exchange_id} set to: {mode}")
         return jsonify({"status": "success", "mode": mode})
     return jsonify({"status": "error", "message": "Invalid mode"}), 400
 
@@ -305,8 +330,11 @@ def set_trading_mode():
 def manual_trade():
     try:
         data = request.json
-        action = data.get('action') # BUY or SELL
-        symbol = data.get('symbol', 'BTC/USDC')
+        engine = get_engine(data.get('engine_id'))
+        if not engine: return jsonify({"status": "error", "message": "Engine not found"}), 404
+        
+        action = data.get('action') 
+        symbol = data.get('symbol')
         
         if engine.trading_mode == "OFF":
             return jsonify({"status": "error", "message": "Trading APAGADO. Cambia a SIM o REAL."}), 400
@@ -316,17 +344,10 @@ def manual_trade():
 
         if action == "BUY":
             success, message = engine.open_position(symbol, price)
-            if success:
-                return jsonify({"status": "success", "message": message})
-            else:
-                return jsonify({"status": "error", "message": message}), 500
-        
+            return jsonify({"status": "success" if success else "error", "message": message})
         elif action == "SELL":
             success, message = engine.close_position(symbol, price)
-            if success:
-                return jsonify({"status": "success", "message": message})
-            else:
-                return jsonify({"status": "error", "message": message}), 500
+            return jsonify({"status": "success" if success else "error", "message": message})
 
         return jsonify({"status": "error", "message": "Acción no válida"}), 400
     except Exception as e:
@@ -335,22 +356,36 @@ def manual_trade():
 
 @app.route('/api/trading/balance')
 def get_trading_balance():
-    return jsonify({"balance": engine.get_balance()})
+    engine = get_engine(request.args.get('engine_id'))
+    if not engine: return jsonify({"balance": 0, "leverage": 1, "currency": "N/A"})
+    res = engine.get_balance()
+    return jsonify({
+        "balance": res['total'],
+        "leverage": res['leverage'],
+        "currency": res['currency']
+    })
 
 @app.route('/api/trading/panic', methods=['POST'])
 def panic_button():
-    engine.close_all_positions()
+    engine = get_engine(request.json.get('engine_id'))
+    if engine:
+        engine.close_all_positions()
     return jsonify({"message": "PÁNICO ACTIVADO: Todas las posiciones cerradas"})
 
 @app.route('/api/trading/auto_symbols', methods=['POST'])
 def update_auto_symbols():
     data = request.json
+    engine = get_engine(data.get('engine_id'))
+    if not engine: return jsonify({"status": "error"}), 404
+    
     symbols = data.get('symbols', [])
     engine.auto_symbols = [s for s in symbols if s in engine.symbols]
     return jsonify({"status": "success", "auto_symbols": engine.auto_symbols})
 
 @app.route('/api/watchlist')
 def get_watchlist():
+    engine = get_engine(request.args.get('engine_id'))
+    if not engine: return jsonify({"watchlist": []})
     return jsonify({"watchlist": engine.get_watchlist()})
 
 @app.route('/api/logs')
@@ -367,34 +402,40 @@ def get_logs():
 
 @app.route('/api/history/clear', methods=['POST'])
 def clear_history():
-    engine.clear_trade_history()
+    engine = get_engine(request.json.get('engine_id'))
+    if engine:
+        engine.clear_trade_history()
     return jsonify({"status": "success", "message": "Historial borrado"})
 
 @app.route('/api/history/delete/<int:index>', methods=['POST'])
 def delete_trade_record(index):
-    if engine.delete_trade(index):
+    engine = get_engine(request.json.get('engine_id'))
+    if engine and engine.delete_trade(index):
         return jsonify({"status": "success", "message": f"Trade {index} deleted"})
-    return jsonify({"status": "error", "message": "Invalid index"}), 400
+    return jsonify({"status": "error", "message": "Error al borrar registro"}), 400
 
 @app.route('/api/backtest')
 def run_backtest():
-    symbol = request.args.get('symbol', 'BTC/USDC')
+    engine = get_engine(request.args.get('engine_id'))
+    if not engine: return jsonify({"error": "No engine"}), 404
+    symbol = request.args.get('symbol')
     tf = request.args.get('tf', '1h')
     return jsonify(engine.run_backtest(symbol, tf))
 
 @app.route('/api/history/<path:symbol>')
 def history(symbol):
+    engine = get_engine(request.args.get('engine_id'))
+    if not engine: return jsonify({"error": "No engine"}), 404
+    
     tf = request.args.get('tf', '1h')
     if symbol in engine.history and tf in engine.history[symbol]:
         h = engine.history[symbol][tf].copy()
-        # Add global status and sentiment
         h['bot_status'] = engine.get_bot_status()
         if symbol in engine.current_stats and tf in engine.current_stats[symbol]:
             stats = engine.current_stats[symbol][tf]
             h['sentiment'] = stats.get('sentiment', 50)
             h['confluence'] = stats.get('confluence')
         
-        logging.info(f"Serving history for {symbol} ({tf}): {len(h.get('candles', []))} candles, {len(h.get('signals', []))} signals")
         return jsonify(h)
     return jsonify({"error": "Not found"}), 404
 

@@ -252,11 +252,13 @@
         <aside class="sidebar">
             <div class="logo" style="margin-bottom: 5px;">APEX</div>
 
-            <!-- Install App Button (hidden by default, shown by JS when PWA is ready) -->
-            <button id="pwa-install-btn" onclick="installPWA()"
-                style="display: none; background: var(--green); color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 15px; width: 100%; box-shadow: 0 4px 10px rgba(38, 166, 154, 0.3);">
-                📲 Instalar App (Móvil)
-            </button>
+            <!-- Exchange Selector -->
+            <div class="tab-header" style="margin-bottom: 15px;">
+                <button class="tab-btn active" id="ex-binance" onclick="switchExchange('binance')" style="font-size: 10px;">Binance Spot</button>
+                <button class="tab-btn" id="ex-okx" onclick="switchExchange('okx')" style="font-size: 10px;">OKX Futures</button>
+            </div>
+
+            <!-- Install App Button -->
 
             <div class="watchlist">
                 <div
@@ -430,6 +432,17 @@
                             style="width: 100%; height: 4px; background: #2a2e39; border-radius: 2px; cursor: pointer; accent-color: var(--accent-pink);">
                     </div>
 
+                    <!-- Pullback Sell Slider -->
+                    <div style="margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <label style="font-size: 8px; color: var(--text-muted);" title="Forzar Venta tras retroceso desde pico en Sobrecompra">Pullback Sell (%)</label>
+                            <span id="pullback_pct_4_val" style="font-size: 9px; color: white; font-weight: bold;">0.0%</span>
+                        </div>
+                        <input type="range" id="pullback_pct_4" min="0" max="10" value="0.0" step="0.5"
+                            oninput="document.getElementById('pullback_pct_4_val').innerText = this.value + '%'; liveUpdate();"
+                            style="width: 100%; height: 4px; background: #2a2e39; border-radius: 2px; cursor: pointer; accent-color: var(--red);">
+                    </div>
+
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
                         <div>
                             <label style="display: block; font-size: 8px; color: var(--text-muted);">Stoch L</label>
@@ -527,6 +540,32 @@
                 <div id="trading-status"
                     style="font-size: 9px; margin-top: 6px; color: var(--text-muted); text-align: center;">Estado: <span
                         style="font-weight:bold;">OFF</span></div>
+
+                <!-- OKX Futures Specific Controls MOVED HERE -->
+                <div id="okx-controls"
+                    style="background: rgba(255, 111, 0, 0.05); padding: 8px; margin-top: 10px; border-radius: 2px; display: none; border: 1px solid rgba(255, 111, 0, 0.2);">
+                    <div style="font-size: 8px; color: #ff6f00; font-weight: bold; text-transform: uppercase; margin-bottom: 6px;">
+                        OKX Futures Config</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                        <div>
+                            <label style="display: block; font-size: 8px; color: var(--text-muted);">Leverage</label>
+                            <select id="okx_leverage" onchange="applyOKXSettings()" style="width: 100%; background: #131722; border: 1px solid #2a2e39; color: white; border-radius: 2px; padding: 2px; font-size: 10px; cursor: pointer;">
+                                <option value="1">1x</option>
+                                <option value="5">5x</option>
+                                <option value="10" selected>10x</option>
+                                <option value="20">20x</option>
+                                <option value="50">50x</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 8px; color: var(--text-muted);">Margin</label>
+                            <select id="okx_margin_mode" onchange="applyOKXSettings()" style="width: 100%; background: #131722; border: 1px solid #2a2e39; color: white; border-radius: 2px; padding: 2px; font-size: 10px; cursor: pointer;">
+                                <option value="cross" selected>Cross</option>
+                                <option value="isolated">Isolated</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Capital Settings -->
@@ -537,9 +576,15 @@
                     Account & Capital</div>
 
                 <div
-                    style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 2px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05);">
-                    <div style="font-size: 8px; color: var(--text-muted); margin-bottom: 2px;">REAL BALANCE (USDC)</div>
-                    <div id="real-balance" style="font-size: 14px; font-weight: bold; color: white;">0.00</div>
+                    style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 2px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-size: 8px; color: var(--text-muted); margin-bottom: 2px;">REAL BALANCE (<span id="balance-currency">USDC</span>)</div>
+                        <div id="real-balance" style="font-size: 14px; font-weight: bold; color: white;">0.00</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 8px; color: var(--text-muted); margin-bottom: 2px;">LEVERAGE</div>
+                        <div id="current-leverage" style="font-size: 14px; font-weight: bold; color: var(--accent-blue);">1x</div>
+                    </div>
                 </div>
 
                 <!-- Performance Dashboard -->
@@ -782,10 +827,11 @@
     <script>
         // Use VAR for extreme compatibility (ES5)
         // Use VAR for extreme compatibility (ES5)
-        var currentSymbol1 = "BTC/USDC";
+        var currentSymbol1 = "BTC/USDT";
         var currentTimeframe1 = "1h";
-        var currentSymbol2 = "ETH/USDC";
+        var currentSymbol2 = "ETH/USDT";
         var currentTimeframe2 = "1h";
+        var currentExchange = "binance";
         var focusedChart = 1;
 
         // Auto-fit flags to prevent annoying jumps when updating data
@@ -803,7 +849,9 @@
             showToast("Conexión Real-time ACTIVADA", "buy");
         });
 
-        socket.on('price_update', function (updates) {
+        socket.on('price_update', function (fullUpdates) {
+            var updates = fullUpdates[currentExchange] || {};
+            
             // Update Chart 1
             if (updates[currentSymbol1] && series.candles) {
                 var up = updates[currentSymbol1];
@@ -939,7 +987,7 @@
 
         function updateLogs() {
             var xhr = new XMLHttpRequest();
-            xhr.open("GET", "/api/logs", true);
+            xhr.open("GET", "/api/logs?engine_id=" + currentExchange, true);
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4 && xhr.status === 200) {
                     var data = JSON.parse(xhr.responseText);
@@ -1163,7 +1211,7 @@
 
         function update2() {
             if (!isMultiView) return;
-            var url = "/api/history/" + encodeURIComponent(currentSymbol2) + "?tf=" + currentTimeframe2;
+            var url = "/api/history/" + encodeURIComponent(currentSymbol2) + "?tf=" + currentTimeframe2 + "&engine_id=" + currentExchange;
             fetch(url).then(r => r.json()).then(data => {
                 if (data.candles) {
                     series.candles2.setData(data.candles);
@@ -1238,7 +1286,7 @@
         }
 
         function update() {
-            var url = "/api/history/" + encodeURIComponent(currentSymbol1) + "?tf=" + currentTimeframe1;
+            var url = "/api/history/" + encodeURIComponent(currentSymbol1) + "?tf=" + currentTimeframe1 + "&engine_id=" + currentExchange;
             var xhr = new XMLHttpRequest();
             xhr.open("GET", url, true);
             xhr.onreadystatechange = function () {
@@ -1293,8 +1341,11 @@
                             }
                             series.candles.setMarkers(markers);
                             if (markers.length > 0) console.log("Chart 1: Rendering " + markers.length + " signal markers.");
-                            if (series.rsi) series.rsi.setMarkers(markers);
-                            if (series.st_k) series.st_k.setMarkers(markers);
+                            var smallMarkers = markers.map(function(m) {
+                                return Object.assign({}, m, { size: 1 }); // Size 1 for indicators
+                            });
+                            if (series.rsi) series.rsi.setMarkers(smallMarkers);
+                            if (series.st_k) series.st_k.setMarkers(smallMarkers);
 
                             if (needsFit1) {
                                 charts.price.timeScale().fitContent();
@@ -1416,7 +1467,9 @@
                 rsi_offset: document.getElementById('rsi_offset').value,
                 st_len_4: document.getElementById('st_len_4').value,
                 st_factor_4: document.getElementById('st_factor_4').value,
-                stoch_offset: document.getElementById('stoch_offset').value
+                stoch_offset: document.getElementById('stoch_offset').value,
+                pullback_pct_4: document.getElementById('pullback_pct_4').value,
+                engine_id: currentExchange
             };
 
             var xhr = new XMLHttpRequest();
@@ -1436,6 +1489,45 @@
                 }
             };
             xhr.send(JSON.stringify(params));
+        }
+
+        function applyOKXSettings() {
+            var lev = document.getElementById('okx_leverage').value;
+            var margin = document.getElementById('okx_margin_mode').value;
+            // This is a specialized call for OKX futures settings
+            // But for now, we can just apply general settings and the backend handles the engine specifics
+            applySettings(true);
+        }
+
+        function switchExchange(ex) {
+            currentExchange = ex;
+            
+            // UI Update
+            document.getElementById('ex-binance').classList.toggle('active', ex === 'binance');
+            document.getElementById('ex-okx').classList.toggle('active', ex === 'okx');
+            
+            document.getElementById('okx-controls').style.display = (ex === 'okx') ? 'block' : 'none';
+            
+            // Update symbols and defaults per exchange
+            if (ex === 'binance') {
+                currentSymbol1 = "BTC/USDC";
+                currentSymbol2 = "ETH/USDC";
+            } else if (ex === 'okx') {
+                currentSymbol1 = "BTC/USDT:USDT";
+                currentSymbol2 = "ETH/USDT:USDT";
+            }
+            
+            document.getElementById('title-1').innerText = currentSymbol1;
+            document.getElementById('title-2').innerText = currentSymbol2;
+            
+            needsFit1 = true;
+            needsFit2 = true;
+            
+            update();
+            updateWatchlist();
+            if (isMultiView) update2();
+            
+            showToast("Cambiado a " + ex.toUpperCase(), "buy");
         }
 
         function switchStrategy(id) {
@@ -1530,7 +1622,7 @@
                     }
                 }
             };
-            xhr.send(JSON.stringify({ mode: mode }));
+            xhr.send(JSON.stringify({ mode: mode, engine_id: currentExchange }));
         }
 
         function manualTrade(action) {
@@ -1558,12 +1650,12 @@
                     }
                 }
             };
-            xhr.send(JSON.stringify({ action: action, symbol: currentSymbol1 }));
+            xhr.send(JSON.stringify({ action: action, symbol: chartIdx === 1 ? currentSymbol1 : currentSymbol2, engine_id: currentExchange }));
         }
 
         function updateWatchlist() {
             var xhr = new XMLHttpRequest();
-            xhr.open("GET", "/api/watchlist", true);
+            xhr.open("GET", "/api/watchlist?engine_id=" + currentExchange, true);
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4 && xhr.status === 200) {
                     var data = JSON.parse(xhr.responseText);
@@ -1704,25 +1796,32 @@
         }
 
         function runBacktest() {
-            showToast("BACKTEST INICIADO... Por favor espera", "");
-            var xhr = new XMLHttpRequest();
-            xhr.open("GET", "/api/backtest?symbol=" + encodeURIComponent(currentSymbol) + "&tf=" + currentTimeframe, true);
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    var out = JSON.parse(xhr.responseText);
-                    alert("BACKTEST RESULTS (" + out.symbol + ")\n\n" +
-                        "Net Profit: " + out.net_profit + "\n" +
-                        "Total Trades: " + out.trades + "\n" +
-                        "Win Rate: " + out.win_rate + "\n" +
-                        "Period: " + out.period);
-                }
-            };
-            xhr.send();
+            var symbol = focusedChart === 1 ? currentSymbol1 : currentSymbol2;
+            var tf = focusedChart === 1 ? currentTimeframe1 : currentTimeframe2;
+            var btn = document.querySelector('button[onclick="runBacktest()"]');
+            btn.innerText = "RUNNING...";
+            btn.disabled = true;
+
+            var url = "/api/backtest?symbol=" + encodeURIComponent(symbol) + "&tf=" + tf + "&engine_id=" + currentExchange;
+            fetch(url).then(r => r.json()).then(data => {
+                showToast("BACKTEST RESULTS (" + data.symbol + ")\n\n" +
+                    "Net Profit: " + data.net_profit + "\n" +
+                    "Total Trades: " + data.trades + "\n" +
+                    "Win Rate: " + data.win_rate + "\n" +
+                    "Period: " + data.period, "buy");
+                btn.innerText = "RUN BACKTEST";
+                btn.disabled = false;
+            }).catch(err => {
+                console.error("Backtest Fail:", err);
+                showToast("Backtest failed: " + err.message, "sell");
+                btn.innerText = "RUN BACKTEST";
+                btn.disabled = false;
+            });
         }
 
         function updateTradeHistory() {
             var xhr = new XMLHttpRequest();
-            xhr.open("GET", "/api/trading/history", true);
+            xhr.open("GET", "/api/trading/history?engine_id=" + currentExchange, true);
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4 && xhr.status === 200) {
                     var data = JSON.parse(xhr.responseText);
@@ -1835,7 +1934,7 @@
                             '<td style="padding: 8px; color:' + pnlColor + '; font-weight:500;">$' + pnlValStr + '</td>' +
                             '<td style="padding: 8px; color:' + pnlColor + '; font-weight:500;">' + pnlPctStr + '%</td>' +
                             '<td style="padding: 8px;"><span style="' + statusStyle + '">' + t.status + '</span></td>' +
-                            '<td style="padding: 8px; text-align:center;" onclick="event.stopPropagation()"><button onclick="deleteTrade(' + (data.history.length - 1 - i) + ')" style="background:transparent; border:none; cursor:pointer; color:rgba(255,255,255,0.3); font-size:12px; transition:color 0.2s;" onmouseover="this.style.color=\'var(--red)\'" onmouseout="this.style.color=\'rgba(255,255,255,0.3)\'">✕</button></td>';
+                            '<td style="padding: 8px; text-align:center;" onclick="event.stopPropagation()"><button onclick="deleteTradeRecord(' + (data.history.length - 1 - i) + ')" style="background:transparent; border:none; cursor:pointer; color:rgba(255,255,255,0.3); font-size:12px; transition:color 0.2s;" onmouseover="this.style.color=\'var(--red)\'" onmouseout="this.style.color=\'rgba(255,255,255,0.3)\'">✕</button></td>';
                         historyBody.appendChild(row);
                     });
 
@@ -1928,25 +2027,42 @@
         }
 
         function clearHistory() {
-            if (!confirm("¿Eliminar todo el historial de operaciones?")) return;
-            fetch('/api/history/clear', { method: 'POST' })
-                .then(function (r) { return r.json(); })
-                .then(function (d) { showToast("Historial eliminado", 'sell'); updateTradeHistory(); });
+            if (!confirm("¿Borrar HISTORIAL COMPLETO?")) return;
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "/api/history/clear", true);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    showToast("Historial borrado", "sell");
+                    updateTradeHistory();
+                }
+            };
+            xhr.send(JSON.stringify({ engine_id: currentExchange }));
         }
 
-        function deleteTrade(index) {
-            fetch('/api/history/delete/' + index, { method: 'POST' })
-                .then(function (r) { return r.json(); })
-                .then(function (d) { showToast("Operación eliminada", 'sell'); updateTradeHistory(); });
+        function deleteTradeRecord(index) {
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "/api/history/delete/" + index, true);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    updateTradeHistory();
+                }
+            };
+            xhr.send(JSON.stringify({ engine_id: currentExchange }));
         }
 
         function updateBalance() {
             var xhr = new XMLHttpRequest();
-            xhr.open("GET", "/api/trading/balance", true);
+            xhr.open("GET", "/api/trading/balance?engine_id=" + currentExchange, true);
             xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    var data = JSON.parse(xhr.responseText);
-                    document.getElementById('real-balance').innerText = data.balance.toFixed(2);
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        const data = JSON.parse(xhr.responseText);
+                        document.getElementById('real-balance').innerText = data.balance.toFixed(2);
+                        document.getElementById('balance-currency').innerText = data.currency || 'USDC';
+                        document.getElementById('current-leverage').innerText = (data.leverage || 1) + 'x';
+                    }
                 }
             };
             xhr.send();
