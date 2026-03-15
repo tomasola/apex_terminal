@@ -99,13 +99,14 @@ class TradeEngine:
             'macd_signal': 9,
             'adx_period': 14,
             'adx_threshold': 25,
-            # Strategy 4 Parameters
+            # Strategy 4 Parameters (Opciones sugeridas por el usuario)
             'rsi_fast_4': 5,
             'rsi_slow_4': 14,
-            'rsi_offset': 0,
+            'rsi_offset': 10.0,
             'st_len_4': 14,
             'st_factor_4': 3.0,
-            'stoch_offset': 30,
+            'stoch_offset': 10.0,
+            'pullback_pct_4': 1.0,
             'leverage': 1
         }
 
@@ -149,7 +150,7 @@ class TradeEngine:
             return
             
         # Get Strategy Signal using modular logic
-        signal, indicators_data = self.get_strategy_signal(df, self.params['active_strategy'])
+        signal, indicators_data = self.get_strategy_signal(df, self.params['active_strategy'], symbol)
         
         # Execute Trade Logic (only on the selected trading timeframe)
         if timeframe == self.params.get('trading_timeframe', '1h'):
@@ -205,7 +206,7 @@ class TradeEngine:
             for i in range(len(rsi_div)):
                 val = rsi_div.iloc[i]
                 v = float(val) if not pd.isna(val) else 0.0
-                c = '#00ff00' if v > 0 else '#ff0000' # Lime if > 0 else Red
+                c = '#ff0000' if v > 0 else '#00ff00' # Red if > 0 (Sell zone) else Lime (Buy zone)
                 rsi_data.append({'time': int(timestamps[i]), 'value': v, 'color': c})
             
         stoch_k_data = []
@@ -265,6 +266,13 @@ class TradeEngine:
 
         if ema_buy: sentiment += 25
         if ema_sell: sentiment -= 25
+        
+        # Strategy 4 Primed Contribution
+        conf = indicators_data.get('confluence')
+        if conf:
+            if conf['buy'].get('primed'): sentiment += 25
+            if conf['sell'].get('primed'): sentiment -= 25
+
         
         # Clamp sentiment
         sentiment = max(0, min(100, sentiment))
@@ -614,7 +622,7 @@ class TradeEngine:
         # We start from index 50 to have enough history for indicators
         for i in range(50, len(df)):
             chunk = df.iloc[:i+1] # Grow data
-            sig, _ = self.get_strategy_signal(chunk, self.params['active_strategy'])
+            sig, _ = self.get_strategy_signal(chunk, self.params['active_strategy'], symbol)
             price = df['close'].iloc[i]
             
             if sig == "BUY" and pos is None:
@@ -668,7 +676,7 @@ class TradeEngine:
             return True
         return False
 
-    def get_strategy_signal(self, df, strategy_id):
+    def get_strategy_signal(self, df, strategy_id, symbol="UNKNOWN"):
         """Modular logic to get signals based on strategy ID"""
         signal = "HOLD"
         data = {}
@@ -762,172 +770,114 @@ class TradeEngine:
             # Parameters
             rsi_fast = int(self.params.get('rsi_fast_4', 5))
             rsi_slow = int(self.params.get('rsi_slow_4', 14))
-            rsi_off = float(self.params.get('rsi_offset', 0))
-            st_len = int(self.params.get('st_len_4', 14))
-            st_fact = float(self.params.get('st_factor_4', 3.0))
-            stoch_off = float(self.params.get('stoch_offset', 30))
-            pullback_pct = float(self.params.get('pullback_pct_4', 0.0))
+            rsi_off = float(self.params.get('rsi_offset', 10)) # User example: 10
+            stoch_off = float(self.params.get('stoch_offset', 10)) # User example: 10
+            pullback_val = float(self.params.get('pullback_pct_4', 0.0))
+            pullback_factor = pullback_val / 100.0 # User: 15 = 15% (0.15)
             
             # Indicators
             rsi_div = calculate_rsi_divergence(df, rsi_fast, rsi_slow)
-            stoch_k, st_trend, st_dir, st_signals = calculate_stochastic_supertrend(df, st_len, 14, 3, st_fact)
+            # Use standard SuperTrend for background visuals
+            stoch_k, st_trend, st_dir, _ = calculate_stochastic_supertrend(df, 14, 14, 3, 3.0)
             
-            # Thresholds
+            conf_signals = pd.Series("", index=df.index)
+            
+            # State for history processing
+            is_primed_buy = False
+            is_primed_sell = False
+            peak_stoch = 0.0
+            peak_rsi = 0.0
+            last_side = ""
+            
+            # Correct threshold display for UI
             stoch_buy_thr = 50 - stoch_off
             stoch_sell_thr = 50 + stoch_off
             
-            # Initialize confluence signals series
-            conf_signals = pd.Series("", index=df.index)
-            
-            # 4-Filter Confluence check for historical data
-            # Logic: We find the first candle in each trend segment that satisfies ALL filters.
-            
-            last_signal_dir = 0 # 0: None, -1: Last was Buy, 1: Last was Sell
-            current_trend_id = 0
-            # Track if we already gave a signal for the current Supertrend segment
-            signaled_in_current_trend = False
-            
-            # Pullback tracking
-            peak_price_ob = 0.0
-            in_overbought = False
-            valley_price_os = 0.0
-            in_oversold = False
-            
-            # RSI Pullback state tracking
-            rsi_peak = 0.0
-            rsi_ob = False
-            rsi_valley = 0.0
-            rsi_os = False
-            
             for i in range(1, len(df)):
-                s_dir = st_dir.iloc[i]
-                prev_s_dir = st_dir.iloc[i-1]
+                sk = stoch_k.iloc[i]
+                rd = rsi_div.iloc[i]
                 
-                # Reset signal tracker on trend flip
-                if s_dir != prev_s_dir:
-                    signaled_in_current_trend = False
+                # Centered values
+                d_sk = sk - 50
+                d_rd = rd
                 
+                # --- PRIMING (Both must be outside range) ---
+                # BUY Zone: Both below range (e.g. < -10)
+                if d_sk < -stoch_off and d_rd < -rsi_off:
+                    if not is_primed_buy:
+                        is_primed_buy = True
+                        peak_stoch = d_sk
+                        peak_rsi = d_rd
+                        logging.info(f"[{self.exchange_id}] {symbol} - ESTRATEGIA 4: PRIMADO PARA COMPRA. Esperando retroceso...")
+                    else:
+                        peak_stoch = min(peak_stoch, d_sk)
+                        peak_rsi = min(peak_rsi, d_rd)
+                    is_primed_sell = False # Mutually exclusive
                 
-                s_k = stoch_k.iloc[i]
-                r_div = rsi_div.iloc[i]
-                current_high = df['high'].iloc[i]
-                current_low = df['low'].iloc[i]
-                current_close = df['close'].iloc[i]
+                # SELL Zone: Both above range (e.g. > 10)
+                elif d_sk > stoch_off and d_rd > rsi_off:
+                    if not is_primed_sell:
+                        is_primed_sell = True
+                        peak_stoch = d_sk
+                        peak_rsi = d_rd
+                        logging.info(f"[{self.exchange_id}] {symbol} - ESTRATEGIA 4: PRIMADO PARA VENTA. Esperando retroceso...")
+                    else:
+                        peak_stoch = max(peak_stoch, d_sk)
+                        peak_rsi = max(peak_rsi, d_rd)
+                    is_primed_buy = False
                 
-                pullback_buy_triggered = False
-                pullback_sell_triggered = False
-
-                # Pullback tracking
-                if pullback_pct > 0:
-                    # OVERBOUGHT (SELL PULLBACK)
-                    if s_k > stoch_sell_thr:
-                        if not in_overbought:
-                            in_overbought = True
-                            peak_price_ob = current_high
-                        else:
-                            peak_price_ob = max(peak_price_ob, current_high)
-                    elif s_k < 50:
-                        # Reset tracking if stoch drops below mid
-                        in_overbought = False
-                        peak_price_ob = 0.0
-                        
-                    # OVERSOLD (BUY PULLBACK)
-                    if s_k < stoch_buy_thr:
-                        if not in_oversold:
-                            in_oversold = True
-                            valley_price_os = current_low
-                        else:
-                            valley_price_os = min(valley_price_os, current_low)
-                    elif s_k > 50:
-                        in_oversold = False
-                        valley_price_os = 0.0
-
-                    if in_overbought and peak_price_ob > 0:
-                        if current_close <= peak_price_ob * (1 - pullback_pct / 100.0):
-                            pullback_sell_triggered = True
-
-                    if in_oversold and valley_price_os > 0:
-                        if current_close >= valley_price_os * (1 + pullback_pct / 100.0):
-                            pullback_buy_triggered = True
-
-                    # RSI DIVERGENCE PULLBACK (SAME SLIDER)
-                    # Sell side: RSI Divergence below -offset
-                    if r_div < -rsi_off:
-                        if not rsi_ob:
-                            rsi_ob = True
-                            rsi_peak = current_high
-                        else:
-                            rsi_peak = max(rsi_peak, current_high)
-                    elif r_div > 0:
-                        rsi_ob = False
-                        rsi_peak = 0.0
-
-                    if rsi_ob and rsi_peak > 0:
-                        if current_close <= rsi_peak * (1 - pullback_pct / 100.0):
-                            pullback_sell_triggered = True
-
-                    # Buy side: RSI Divergence above offset
-                    if r_div > rsi_off:
-                        if not rsi_os:
-                            rsi_os = True
-                            rsi_valley = current_low
-                        else:
-                            rsi_valley = min(rsi_valley, current_low)
-                    elif r_div < 0:
-                        rsi_os = False
-                        rsi_valley = 0.0
-
-                    if rsi_os and rsi_valley > 0:
-                        if current_close >= rsi_valley * (1 + pullback_pct / 100.0):
-                            pullback_buy_triggered = True
-
-                if signaled_in_current_trend and not (pullback_buy_triggered or pullback_sell_triggered):
-                    continue
+                # --- TRIGGERING (Pullback achieved in EITHER primed indicator) ---
+                if is_primed_buy:
+                    # Valley pullback: val increases towards 0
+                    # if peak was -15, and factor is 0.1, trigger is -13.5
+                    thr_sk = peak_stoch * (1 - pullback_factor)
+                    thr_rd = peak_rsi * (1 - pullback_factor)
+                    if d_sk >= thr_sk or d_rd >= thr_rd:
+                        if last_side != "BUY":
+                            conf_signals.iloc[i] = "BUY"
+                            logging.info(f"[{self.exchange_id}] {symbol} - ESTRATEGIA 4: SEÑAL DE COMPRA DISPARADA POR RETROCESO.")
+                            last_side = "BUY"
+                        is_primed_buy = False
+                        peak_stoch = 0.0
+                        peak_rsi = 0.0
                 
-                # BUY CONDITION: Trend is UP (-1) AND Stoch K < BuyThr AND RSI Div > Offset
-                if pullback_buy_triggered or (s_dir == -1 and s_k < stoch_buy_thr and r_div > rsi_off):
-                    if not signaled_in_current_trend:
-                        conf_signals.iloc[i] = "BUY"
-                        signaled_in_current_trend = True
-                        in_oversold = False
-                        valley_price_os = 0.0
-                        rsi_os = False
-                        rsi_valley = 0.0
-                
-                # SELL CONDITION: Trend is DOWN (1) AND Stoch K > SellThr AND RSI Div < -Offset
-                elif pullback_sell_triggered or (s_dir == 1 and s_k > stoch_sell_thr and r_div < -rsi_off):
-                    conf_signals.iloc[i] = "SELL"
-                    signaled_in_current_trend = True
-                    # Reset pullback states
-                    in_overbought = False
-                    peak_price_ob = 0.0
-                    rsi_ob = False
-                    rsi_peak = 0.0
+                elif is_primed_sell:
+                    # Peak pullback: val decreases towards 0
+                    # if peak was 15, and factor is 0.1, trigger is 13.5
+                    thr_sk = peak_stoch * (1 - pullback_factor)
+                    thr_rd = peak_rsi * (1 - pullback_factor)
+                    if d_sk <= thr_sk or d_rd <= thr_rd:
+                        if last_side != "SELL":
+                            conf_signals.iloc[i] = "SELL"
+                            logging.info(f"[{self.exchange_id}] {symbol} - ESTRATEGIA 4: SEÑAL DE VENTA DISPARADA POR RETROCESO.")
+                            last_side = "SELL"
+                        is_primed_sell = False
+                        peak_stoch = 0.0
+                        peak_rsi = 0.0
             
-            # Latest Signal for execution
-            signal = conf_signals.iloc[-1]
+            # Latest Signal
+            signal = conf_signals.iloc[-1] if not conf_signals.empty else "HOLD"
+            if signal == "": signal = "HOLD"
             
-            # Real-time Confluence Diagnostic
-            s_dir = st_dir.iloc[-1]
-            s_k = stoch_k.iloc[-1]
-            r_div = rsi_div.iloc[-1]
-            
+            # Real-time Diagnostics
+            lk = stoch_k.iloc[-1] - 50
+            ld = rsi_div.iloc[-1]
             confluence = {
                 'buy': {
-                    'trend_ok': bool(s_dir == -1),
-                    'stoch_ok': bool(s_k < stoch_buy_thr),
-                    'rsi_ok': bool(r_div > rsi_off)
+                    'primed': bool(is_primed_buy),
+                    'stoch_ok': bool(lk < -stoch_off),
+                    'rsi_ok': bool(ld < -rsi_off)
                 },
                 'sell': {
-                    'trend_ok': bool(s_dir == 1),
-                    'stoch_ok': bool(s_k > stoch_sell_thr),
-                    'rsi_ok': bool(r_div < -rsi_off)
+                    'primed': bool(is_primed_sell),
+                    'stoch_ok': bool(lk > stoch_off),
+                    'rsi_ok': bool(ld > rsi_off)
                 },
                 'params': {
                     'stoch_buy_thr': round(stoch_buy_thr, 1),
                     'stoch_sell_thr': round(stoch_sell_thr, 1),
                     'rsi_off': round(rsi_off, 2),
-                    'pullback_pct': round(pullback_pct, 2)
+                    'pullback_val': round(pullback_val, 2)
                 }
             }
                 
@@ -935,9 +885,10 @@ class TradeEngine:
                 'rsi_div': rsi_div,
                 'stoch_rsi': stoch_k,
                 'st_trend': st_trend,
-                'signals': conf_signals, # Selective confluence markers
+                'signals': conf_signals,
                 'confluence': confluence
             }
+
             
         return signal, data
 

@@ -432,13 +432,13 @@
                             style="width: 100%; height: 4px; background: #2a2e39; border-radius: 2px; cursor: pointer; accent-color: var(--accent-pink);">
                     </div>
 
-                    <!-- Pullback Sell Slider -->
+                    <!-- Pullback Slider (Dynamic Indicator Reversion) -->
                     <div style="margin-bottom: 8px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <label style="font-size: 8px; color: var(--text-muted);" title="Forzar Venta tras retroceso desde pico en Sobrecompra">Pullback Sell (%)</label>
+                            <label style="font-size: 8px; color: var(--text-muted);" title="Retroceso necesario del indicador para disparar (1 = 10% del pico)">Pullback Reversión (%)</label>
                             <span id="pullback_pct_4_val" style="font-size: 9px; color: white; font-weight: bold;">0.0%</span>
                         </div>
-                        <input type="range" id="pullback_pct_4" min="0" max="10" value="0.0" step="0.5"
+                        <input type="range" id="pullback_pct_4" min="0" max="100" value="0.0" step="0.5"
                             oninput="document.getElementById('pullback_pct_4_val').innerText = this.value + '%'; liveUpdate();"
                             style="width: 100%; height: 4px; background: #2a2e39; border-radius: 2px; cursor: pointer; accent-color: var(--red);">
                     </div>
@@ -1072,12 +1072,12 @@
 
                 series.rsi = charts.rsi.addBaselineSeries({
                     baseValue: { type: 'price', price: 0 },
-                    topLineColor: '#14c79a',
-                    topFillColor1: 'rgba(20, 199, 154, 0.28)',
-                    topFillColor2: 'rgba(20, 199, 154, 0.05)',
-                    bottomLineColor: '#e42c69',
-                    bottomFillColor1: 'rgba(228, 44, 105, 0.05)',
-                    bottomFillColor2: 'rgba(228, 44, 105, 0.28)',
+                    topLineColor: '#e42c69',     // ROJO (Venta)
+                    topFillColor1: 'rgba(228, 44, 105, 0.28)',
+                    topFillColor2: 'rgba(228, 44, 105, 0.05)',
+                    bottomLineColor: '#14c79a',  // VERDE (Compra)
+                    bottomFillColor1: 'rgba(20, 199, 154, 0.05)',
+                    bottomFillColor2: 'rgba(20, 199, 154, 0.28)',
                     lineWidth: 2
                 });
                 var sCont = document.getElementById('c-stoch');
@@ -1212,16 +1212,26 @@
         function update2() {
             if (!isMultiView) return;
             var url = "/api/history/" + encodeURIComponent(currentSymbol2) + "?tf=" + currentTimeframe2 + "&engine_id=" + currentExchange;
-            fetch(url).then(r => r.json()).then(data => {
-                if (data.candles) {
-                    series.candles2.setData(data.candles);
-                    if (needsFit2) {
-                        charts.price2.timeScale().fitContent();
-                        needsFit2 = false;
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", url, true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText);
+                        if (data.candles && series.candles2) {
+                            series.candles2.setData(data.candles);
+                            if (needsFit2) {
+                                charts.price2.timeScale().fitContent();
+                                needsFit2 = false;
+                            }
+                            document.getElementById('title-2').innerText = currentSymbol2;
+                        }
+                    } catch (e) {
+                        console.error("Update2 Parse Error", e);
                     }
-                    document.getElementById('title-2').innerText = currentSymbol2;
                 }
-            }).catch(err => console.error("Update2 Fail:", err));
+            };
+            xhr.send();
         }
 
         function setTimeframe(tf, chartIdx) {
@@ -1345,9 +1355,14 @@
                             } catch (err) { console.error("Candle Markers Error:", err); }
 
                             try {
-                                var smallMarkers = markers.map(function(m) {
-                                    return Object.assign({}, m, { size: 1 }); // Size 1 for indicators
-                                });
+                                var smallMarkers = [];
+                                for (var mIdx = 0; mIdx < markers.length; mIdx++) {
+                                    var m = markers[mIdx];
+                                    var sm = {};
+                                    for (var key in m) { if (m.hasOwnProperty(key)) sm[key] = m[key]; }
+                                    sm.size = 1;
+                                    smallMarkers.push(sm);
+                                }
                                 if (series.rsi) series.rsi.setMarkers(smallMarkers);
                                 if (series.st_k) series.st_k.setMarkers(smallMarkers);
                             } catch (err) { console.error("Indicator Markers Error:", err); }
@@ -1374,22 +1389,34 @@
 
                                 var currentMode = "OFF";
                                 // Dynamic colors based on mode
+                                var bannerColor = "var(--text-muted)";
+                                var bannerBorder = "#333";
+                                var bannerBg = "rgba(0,0,0,0.2)";
+
                                 if (data.bot_status.indexOf("REAL") !== -1) {
                                     currentMode = "REAL";
-                                    banner.style.color = "var(--red)";
-                                    banner.style.borderColor = "var(--red)";
-                                    banner.style.background = "rgba(239, 83, 80, 0.1)";
+                                    bannerColor = "var(--red)";
+                                    bannerBorder = "var(--red)";
+                                    bannerBg = "rgba(239, 83, 80, 0.1)";
                                 } else if (data.bot_status.indexOf("SIM") !== -1) {
                                     currentMode = "SIM";
-                                    banner.style.color = "var(--green)";
-                                    banner.style.borderColor = "var(--green)";
-                                    banner.style.background = "rgba(38, 166, 154, 0.1)";
-                                } else {
-                                    currentMode = "OFF";
-                                    banner.style.color = "var(--text-muted)";
-                                    banner.style.borderColor = "#333";
-                                    banner.style.background = "rgba(0,0,0,0.2)";
+                                    bannerColor = "var(--green)";
+                                    bannerBorder = "var(--green)";
+                                    bannerBg = "rgba(38, 166, 154, 0.1)";
                                 }
+
+                                // PRIMED OVERRIDE (Yellow Flash)
+                                if (data.confluence && (data.confluence.buy.primed || data.confluence.sell.primed)) {
+                                    bannerColor = "var(--yellow)";
+                                    bannerBorder = "var(--yellow)";
+                                    bannerBg = "rgba(255, 215, 0, 0.1)";
+                                    banner.innerText += " (PRIMADO)";
+                                }
+
+                                banner.style.color = bannerColor;
+                                banner.style.borderColor = bannerBorder;
+                                banner.style.background = bannerBg;
+
 
                                 // Sync buttons
                                 var btns = ['OFF', 'SIM', 'REAL'];
@@ -1416,14 +1443,21 @@
                             if ((activeStrategy === 1 || activeStrategy === 4) && data.confluence) {
                                 diagPane.style.display = 'block';
                                 var c = data.confluence;
+                                var isS4 = (activeStrategy === 4);
 
-                                // Update Buy Filters
-                                document.querySelector('#buy-trend .status').innerText = c.buy.trend_ok ? "✅" : "❌";
+                                // Dynamic Labels for Strategy 4
+                                var buyTrendLabel = isS4 ? "Primado Compra" : "Tendencia Alcista";
+                                var sellTrendLabel = isS4 ? "Primado Venta" : "Tendencia Bajista";
+                                var buyTrendStatus = isS4 ? c.buy.primed : c.buy.trend_ok;
+                                var sellTrendStatus = isS4 ? c.sell.primed : c.sell.trend_ok;
+
+                                document.querySelector('#buy-trend span:first-child').innerText = buyTrendLabel;
+                                document.querySelector('#buy-trend .status').innerText = buyTrendStatus ? "✅" : "❌";
                                 document.querySelector('#buy-stoch .status').innerText = c.buy.stoch_ok ? "✅" : "❌";
                                 document.querySelector('#buy-rsi .status').innerText = c.buy.rsi_ok ? "✅" : "❌";
 
-                                // Update Sell Filters
-                                document.querySelector('#sell-trend .status').innerText = c.sell.trend_ok ? "✅" : "❌";
+                                document.querySelector('#sell-trend span:first-child').innerText = sellTrendLabel;
+                                document.querySelector('#sell-trend .status').innerText = sellTrendStatus ? "✅" : "❌";
                                 document.querySelector('#sell-stoch .status').innerText = c.sell.stoch_ok ? "✅" : "❌";
                                 document.querySelector('#sell-rsi .status').innerText = c.sell.rsi_ok ? "✅" : "❌";
 
@@ -1487,7 +1521,7 @@
                         update(); // Refresh with new signals
                     } else if (xhr.status === 401) {
                         showToast("Sesión expirada. Recargando página para hacer Login...", "sell");
-                        setTimeout(() => window.location.reload(), 1500);
+                        setTimeout(function() { window.location.reload(); }, 1500);
                     } else {
                         if (!isSilent) showToast("Error de conexión al aplicar configuración", "sell");
                     }
@@ -1578,15 +1612,15 @@
             var rsiOff = parseFloat(document.getElementById('rsi_offset').value) || 0;
             var stochOff = parseFloat(document.getElementById('stoch_offset').value) || 0;
 
-            // RSI Lines (Symmetric ±offset)
-            var rBuy = rsiOff;
-            var rSell = -rsiOff;
+            // RSI Lines (Symmetric ±offset) - Alineado con lógia de reversión (Buy Low, Sell High)
+            var rBuy = -rsiOff;
+            var rSell = rsiOff;
 
             rsiLines.push(series.rsi.createPriceLine({
-                price: rBuy, color: '#26a69a', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'BUY > ' + rBuy
+                price: rBuy, color: '#26a69a', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'BUY < ' + rBuy
             }));
             rsiLines.push(series.rsi.createPriceLine({
-                price: rSell, color: '#ef5350', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'SELL < ' + rSell
+                price: rSell, color: '#ef5350', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'SELL > ' + rSell
             }));
 
             // Stoch Lines
@@ -1621,7 +1655,7 @@
                         document.getElementById('trading-status').querySelector('span').style.color = (mode === 'REAL' ? 'var(--red)' : (mode === 'SIM' ? 'var(--green)' : 'var(--text-muted)'));
                     } else if (xhr.status === 401) {
                         showToast("Sesión expirada. Recargando página para hacer Login...", "sell");
-                        setTimeout(() => window.location.reload(), 1500);
+                        setTimeout(function() { window.location.reload(); }, 1500);
                     } else {
                         showToast("Error de conexión con el Servidor", "sell");
                     }
@@ -1644,7 +1678,7 @@
                         updateBalance();
                     } else if (xhr.status === 401) {
                         showToast("Sesión expirada. Recargando página para hacer Login...", "sell");
-                        setTimeout(() => window.location.reload(), 1500);
+                        setTimeout(function() { window.location.reload(); }, 1500);
                     } else {
                         try {
                             var data = JSON.parse(xhr.responseText);
@@ -1694,7 +1728,7 @@
                 if (xhr.readyState === 4) {
                     if (xhr.status === 200) {
                         showToast("Símbolos de Auto-Trading actualizados", "buy");
-                        liveUpdate();
+                        setTimeout(function() { window.location.reload(); }, 1500);
                     } else if (xhr.status === 401) {
                         showToast("Sesión expirada. Recargando página para hacer Login...", "sell");
                         setTimeout(() => window.location.reload(), 1500);
@@ -1808,20 +1842,25 @@
             btn.disabled = true;
 
             var url = "/api/backtest?symbol=" + encodeURIComponent(symbol) + "&tf=" + tf + "&engine_id=" + currentExchange;
-            fetch(url).then(r => r.json()).then(data => {
-                showToast("BACKTEST RESULTS (" + data.symbol + ")\n\n" +
-                    "Net Profit: " + data.net_profit + "\n" +
-                    "Total Trades: " + data.trades + "\n" +
-                    "Win Rate: " + data.win_rate + "\n" +
-                    "Period: " + data.period, "buy");
-                btn.innerText = "RUN BACKTEST";
-                btn.disabled = false;
-            }).catch(err => {
-                console.error("Backtest Fail:", err);
-                showToast("Backtest failed: " + err.message, "sell");
-                btn.innerText = "RUN BACKTEST";
-                btn.disabled = false;
-            });
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", url, true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        var data = JSON.parse(xhr.responseText);
+                        showToast("BACKTEST RESULTS (" + data.symbol + ")\n\n" +
+                            "Net Profit: " + data.net_profit + "\n" +
+                            "Total Trades: " + data.trades + "\n" +
+                            "Win Rate: " + data.win_rate + "\n" +
+                            "Period: " + data.period, "buy");
+                    } else {
+                        showToast("Backtest failed: " + xhr.status, "sell");
+                    }
+                    btn.innerText = "RUN BACKTEST";
+                    btn.disabled = false;
+                }
+            };
+            xhr.send();
         }
 
         function updateTradeHistory() {
@@ -2024,11 +2063,23 @@
             xhr.send();
         }
 
-        function panicButton() {
-            if (!confirm("¿ESTÁS SEGURO? Se cerrarán TODAS las posiciones activas (SIM y REAL).")) return;
-            fetch('/api/trading/panic', { method: 'POST' })
-                .then(function (r) { return r.json(); })
-                .then(function (d) { showToast(d.message, 'sell'); update(); });
+        function panicSell() {
+            if (!confirm("⚠️ ¿ESTÁS SEGURO? Se cerrarán todas las posiciones abiertas.")) return;
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "/api/trading/panic", true);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        showToast("VENTA DE PÁNCO EJECUTADA", "sell");
+                        updateWatchlist();
+                        updateTradeHistory();
+                    } else {
+                        showToast("Error al ejecutar venta de pánico", "sell");
+                    }
+                }
+            };
+            xhr.send(JSON.stringify({ engine_id: currentExchange }));
         }
 
         function clearHistory() {
@@ -2063,7 +2114,7 @@
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4) {
                     if (xhr.status === 200) {
-                        const data = JSON.parse(xhr.responseText);
+                        var data = JSON.parse(xhr.responseText);
                         document.getElementById('real-balance').innerText = data.balance.toFixed(2);
                         document.getElementById('balance-currency').innerText = data.currency || 'USDC';
                         document.getElementById('current-leverage').innerText = (data.leverage || 1) + 'x';
