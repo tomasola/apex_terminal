@@ -827,9 +827,9 @@
     <script>
         // Use VAR for extreme compatibility (ES5)
         // Use VAR for extreme compatibility (ES5)
-        var currentSymbol1 = "BTC/USDT";
+        var currentSymbol1 = "BTC/USDC";
         var currentTimeframe1 = "1h";
-        var currentSymbol2 = "ETH/USDT";
+        var currentSymbol2 = "ETH/USDC";
         var currentTimeframe2 = "1h";
         var currentExchange = "binance";
         var focusedChart = 1;
@@ -1183,6 +1183,7 @@
 
                 update();
                 updateWatchlist();
+                updateBalance();
                 updateTradeHistory();
                 updateLogs();
 
@@ -1564,6 +1565,7 @@
             
             update();
             updateWatchlist();
+            updateBalance();
             if (isMultiView) update2();
             
             showToast("Cambiado a " + ex.toUpperCase(), "buy");
@@ -1710,6 +1712,11 @@
                             '<span class="chg" style="color:' + color + '; font-size:10px; width:35px; text-align:right;">' + sign + item.change + '%</span></div>' +
                             '</div>';
                     });
+                    if (html === "") {
+                        html = '<div style="padding:15px; text-align:center; color:var(--red); font-size:11px;">' +
+                               '<i class="fas fa-exclamation-triangle"></i><br>LISTA VACÍA<br>' +
+                               '<span style="font-size:9px; color:var(--text-muted);">Verifique API Keys en CONFIG / LOGS</span></div>';
+                    }
                     document.getElementById('watchlist-items').innerHTML = html;
                 }
             };
@@ -2113,11 +2120,21 @@
             xhr.open("GET", "/api/trading/balance?engine_id=" + currentExchange, true);
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4) {
-                    if (xhr.status === 200) {
-                        var data = JSON.parse(xhr.responseText);
-                        document.getElementById('real-balance').innerText = data.balance.toFixed(2);
-                        document.getElementById('balance-currency').innerText = data.currency || 'USDC';
-                        document.getElementById('current-leverage').innerText = (data.leverage || 1) + 'x';
+                    if (xhr.status === 200) { // Corrected structure: removed redundant if and moved lines inside try/catch
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            document.getElementById('real-balance').innerText = data.balance.toFixed(2);
+                            document.getElementById('balance-currency').innerHTML = data.currency || 'USDC'; // Changed to innerHTML
+                            document.getElementById('current-leverage').innerText = (data.leverage || 1) + 'x'; // Moved inside try
+
+                            // Actualizar también la etiqueta pequeña descriptiva
+                            var labelEl = document.querySelector('#balance-section div[style*="text-transform: uppercase"]');
+                            if (labelEl) {
+                                labelEl.innerText = "Real Balance " + (data.currency || 'USDC');
+                            }
+                        } catch (e) {
+                            console.error("Error parsing balance:", e);
+                        }
                     }
                 }
             };
