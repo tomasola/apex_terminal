@@ -114,13 +114,27 @@ def get_engine(engine_id=None):
 last_errors = []
 
 def bot_loop():
+    cycle_count = 0
     while True:
         try:
-            for eng_id, engine in engines.items():
-                try:
-                    engine.run_cycle()
-                except Exception as e:
-                    logging.error(f"Error in {eng_id} cycle: {e}")
+            cycle_count += 1
+            if engines:
+                for eng_id, engine in engines.items():
+                    try:
+                        engine.run_cycle()
+                    except Exception as e:
+                        logging.error(f"Error in {eng_id} cycle: {e}")
+            
+            # Heartbeat & Keep-Alive every 10 cycles (~5 mins)
+            if cycle_count >= 10:
+                logging.info("💓 Bot Heartbeat: Bucle de monitoreo activo.")
+                cycle_count = 0
+                # Generate outbound traffic to prevent platform sleep
+                try: 
+                    import requests
+                    requests.get("https://www.google.com", timeout=5)
+                except: pass
+
             time.sleep(30)
         except Exception as e:
             err_msg = f"Loop error: {e}"
