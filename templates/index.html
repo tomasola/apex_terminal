@@ -591,6 +591,26 @@
                 </div>
             </div>
 
+            <!-- Redundancy/Failover Control -->
+            <div id="failover-pane" class="glass-pane" style="background: rgba(41, 98, 255, 0.05); padding: 10px; margin-bottom: 10px; border: 1px solid rgba(41, 98, 255, 0.2);">
+                <div style="font-size: 9px; color: var(--accent-blue); font-weight: bold; text-transform: uppercase; margin-bottom: 8px;">
+                    🛡️ CONEXIÓN Y REDUNDANCIA</div>
+                
+                <div id="failover-info" style="font-size: 10px; color: white; margin-bottom: 10px;">
+                    Cargando estado...
+                </div>
+
+                <div id="failover-actions" style="display: flex; flex-direction: column; gap: 5px;">
+                    <button id="btn-takeover" onclick="handleTakeover()" 
+                        style="width: 100%; font-size: 8px; padding: 6px; background: #c2185b; color: white; border: none; cursor: pointer; border-radius: 2px; font-weight: bold; display: none;">
+                        PASAR CONTROL A CLOUD (APAGAR PC)
+                    </button>
+                    <div id="countdown-reserve" style="font-size: 8px; color: #888; text-align: center; display: none;">
+                        Latido detectado hace: <span id="last-hb-time">0</span>s
+                    </div>
+                </div>
+            </div>
+
             <!-- Capital Settings -->
             <div
                 style="background: rgba(240, 98, 146, 0.03); padding: 10px; border-radius: 4px; border: 1px solid var(--border-glass); margin-bottom: 10px;">

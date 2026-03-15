@@ -112,24 +112,53 @@ def get_engine(engine_id=None):
 
 # Failover State (For PC -> Railway redundancy)
 last_primary_heartbeat = 0
+kill_requested = False
 primary_url = os.environ.get("PRIMARY_URL", "https://apex-terminal-production.up.railway.app")
 is_on_railway = os.environ.get("RAILWAY_STATIC_URL") is not None or os.environ.get("PORT") is not None
 
+@app.route('/api/failover/status', methods=['GET'])
+def failover_status():
+    time_since = time.time() - last_primary_heartbeat
+    return jsonify({
+        "is_on_railway": is_on_railway,
+        "last_heartbeat": last_primary_heartbeat,
+        "seconds_ago": round(time_since, 1),
+        "is_standby": is_on_railway and time_since < 300,
+        "kill_requested": kill_requested
+    })
+
+@app.route('/api/failover/kill', methods=['POST'])
+@login_required
+def request_kill():
+    global kill_requested
+    kill_requested = True
+    logging.info("🛑 SOLICITUD DE APAGADO REMOTO RECIBIDA.")
+    return jsonify({"status": "success", "message": "Se ha enviado la señal de apagado al PC."})
+
+@app.route('/api/failover/takeover', methods=['POST'])
+@login_required
+def force_takeover():
+    global last_primary_heartbeat, kill_requested
+    last_primary_heartbeat = 0
+    kill_requested = True
+    logging.info("🛡️ TOMA DE MANDO MANUAL: Railway asumiendo control total.")
+    return jsonify({"status": "success", "message": "Instancia Cloud activada. PC desactivado."})
+
 @app.route('/api/failover/heartbeat', methods=['POST'])
 def receive_heartbeat():
-    global last_primary_heartbeat
+    global last_primary_heartbeat, kill_requested
     last_primary_heartbeat = time.time()
-    return jsonify({"status": "received", "time": last_primary_heartbeat})
+    # If a takeover happened, we tell the PC to stop
+    return jsonify({"status": "received", "kill_requested": kill_requested})
 
 def bot_loop():
-    global last_primary_heartbeat
+    global last_primary_heartbeat, kill_requested
     cycle_count = 0
     while True:
         try:
             cycle_count += 1
             
             # FAILOVER LOGIC
-            # If we are on Railway, check if the Primary (PC) is alive
             is_standby = False
             if is_on_railway:
                 time_since_last = time.time() - last_primary_heartbeat
@@ -141,7 +170,12 @@ def bot_loop():
                 # We are the Primary (PC), send heartbeat to Railway
                 try:
                     import requests
-                    requests.post(f"{primary_url}/api/failover/heartbeat", timeout=5)
+                    resp = requests.post(f"{primary_url}/api/failover/heartbeat", timeout=5)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("kill_requested"):
+                            logging.warning("🚨 SEÑAL DE APAGADO REMOTA RECIBIDA DESDE CLOUD. Cerrando bot local...")
+                            os._exit(0) # Immediate exit
                 except:
                     pass
 
