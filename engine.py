@@ -680,47 +680,86 @@ class TradeEngine:
         """Modular logic to get signals based on strategy ID"""
         signal = "HOLD"
         data = {}
-        
-        if strategy_id == 1: # RSI Div + Stoch Supertrend
-            rsi_div = calculate_rsi_divergence(df, self.params['rsi_fast'], self.params['rsi_slow'])
-            stoch_k, st_trend, st_dir, st_signals = calculate_stochastic_supertrend(df, self.params['stoch_rsi_len'], self.params['stoch_k_period'], self.params['stoch_smooth_k'], self.params['st_factor'])
-            
-            latest_rsi_div = rsi_div.iloc[-1]
-            latest_st_signal = st_signals.iloc[-1]
-            if latest_st_signal == "BUY" and latest_rsi_div > 0: signal = "BUY"
-            elif latest_st_signal == "SELL" and latest_rsi_div < 0: signal = "SELL"
-            
-            # Real-time Confluence Diagnostic for Strategy 1
-            confluence = {
-                'buy': {
-                    'trend_ok': bool(latest_st_signal == "BUY"),
-                    'stoch_ok': True, # Not used in S1
-                    'rsi_ok': bool(latest_rsi_div > 0)
-                },
-                'sell': {
-                    'trend_ok': bool(latest_st_signal == "SELL"),
-                    'stoch_ok': True, # Not used in S1
-                    'rsi_ok': bool(latest_rsi_div < 0)
-                }
-            }
 
-            sync_signals = pd.Series("", index=df.index)
-            for i in range(len(df)):
-                # Relaxed: Check if either current or previous candle has RSI confluence
-                # This makes signals more frequent as RSI doesn't have to align perfectly on one bar
-                curr_rsi = rsi_div.iloc[i]
-                prev_rsi = rsi_div.iloc[i-1] if i > 0 else 0.0
+        if strategy_id == 1: # Fixed Dynamic RSI & STOCH (Strategy 4 Logic Fixed)
+            # FIXED Parameters based on user image
+            rsi_fast = 5
+            rsi_slow = 14
+            rsi_off = 14.0
+            stoch_off = 30.0
+            pullback_factor = 0.10 # 10%
+            
+            # Indicators
+            rsi_div = calculate_rsi_divergence(df, rsi_fast, rsi_slow)
+            stoch_k, st_trend, st_dir, _ = calculate_stochastic_supertrend(df, 14, 14, 3, 3.0)
+            
+            conf_signals = pd.Series("", index=df.index)
+            is_primed_buy = False
+            is_primed_sell = False
+            peak_stoch = 0.0
+            peak_rsi = 0.0
+            last_side = ""
+            
+            stoch_buy_thr = 50 - stoch_off
+            stoch_sell_thr = 50 + stoch_off
+            
+            for i in range(1, len(df)):
+                sk = stoch_k.iloc[i]
+                rd = rsi_div.iloc[i]
+                d_sk = sk - 50
+                d_rd = rd
                 
-                if st_signals.iloc[i] == "BUY" and (curr_rsi > 0 or prev_rsi > 0):
-                    sync_signals.iloc[i] = "BUY"
-                elif st_signals.iloc[i] == "SELL" and (curr_rsi < 0 or prev_rsi < 0):
-                    sync_signals.iloc[i] = "SELL"
+                if d_sk < -stoch_off and d_rd < -rsi_off:
+                    if not is_primed_buy:
+                        is_primed_buy = True
+                        peak_stoch = d_sk
+                        peak_rsi = d_rd
+                    else:
+                        peak_stoch = min(peak_stoch, d_sk)
+                        peak_rsi = min(peak_rsi, d_rd)
+                    is_primed_sell = False
+                elif d_sk > stoch_off and d_rd > rsi_off:
+                    if not is_primed_sell:
+                        is_primed_sell = True
+                        peak_stoch = d_sk
+                        peak_rsi = d_rd
+                    else:
+                        peak_stoch = max(peak_stoch, d_sk)
+                        peak_rsi = max(peak_rsi, d_rd)
+                    is_primed_buy = False
+                
+                if is_primed_buy:
+                    thr_sk = peak_stoch * (1 - pullback_factor)
+                    thr_rd = peak_rsi * (1 - pullback_factor)
+                    if d_sk >= thr_sk or d_rd >= thr_rd:
+                        if last_side != "BUY":
+                            conf_signals.iloc[i] = "BUY"
+                            last_side = "BUY"
+                        is_primed_buy = False
+                elif is_primed_sell:
+                    thr_sk = peak_stoch * (1 - pullback_factor)
+                    thr_rd = peak_rsi * (1 - pullback_factor)
+                    if d_sk <= thr_sk or d_rd <= thr_rd:
+                        if last_side != "SELL":
+                            conf_signals.iloc[i] = "SELL"
+                            last_side = "SELL"
+                        is_primed_sell = False
 
+            signal = conf_signals.iloc[-1] if not conf_signals.empty else "HOLD"
+            if signal == "": signal = "HOLD"
+            
+            lk = stoch_k.iloc[-1] - 50
+            ld = rsi_div.iloc[-1]
+            confluence = {
+                'buy': { 'primed': bool(is_primed_buy), 'stoch_ok': bool(lk < -stoch_off), 'rsi_ok': bool(ld < -rsi_off) },
+                'sell': { 'primed': bool(is_primed_sell), 'stoch_ok': bool(lk > stoch_off), 'rsi_ok': bool(ld > rsi_off) }
+            }
+                
             data = {
                 'rsi_div': rsi_div,
                 'stoch_rsi': stoch_k,
                 'st_trend': st_trend,
-                'signals': sync_signals,
+                'signals': conf_signals,
                 'confluence': confluence
             }
             
