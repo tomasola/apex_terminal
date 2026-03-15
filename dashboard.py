@@ -110,18 +110,46 @@ def get_engine(engine_id=None):
         return next(iter(engines.values())) if engines else None
     return engines.get(engine_id)
 
-# Track last errors for diagnostics
-last_errors = []
+# Failover State (For PC -> Railway redundancy)
+last_primary_heartbeat = 0
+primary_url = os.environ.get("PRIMARY_URL", "https://apex-terminal-production.up.railway.app")
+is_on_railway = os.environ.get("RAILWAY_STATIC_URL") is not None or os.environ.get("PORT") is not None
+
+@app.route('/api/failover/heartbeat', methods=['POST'])
+def receive_heartbeat():
+    global last_primary_heartbeat
+    last_primary_heartbeat = time.time()
+    return jsonify({"status": "received", "time": last_primary_heartbeat})
 
 def bot_loop():
+    global last_primary_heartbeat
     cycle_count = 0
     while True:
         try:
             cycle_count += 1
+            
+            # FAILOVER LOGIC
+            # If we are on Railway, check if the Primary (PC) is alive
+            is_standby = False
+            if is_on_railway:
+                time_since_last = time.time() - last_primary_heartbeat
+                if time_since_last < 300: # 5 minutes threshold
+                    is_standby = True
+                    if cycle_count % 10 == 0:
+                        logging.info("🛡️ MODO RESERVA: PC detectado como Activo. Railway en espera.")
+            else:
+                # We are the Primary (PC), send heartbeat to Railway
+                try:
+                    import requests
+                    requests.post(f"{primary_url}/api/failover/heartbeat", timeout=5)
+                except:
+                    pass
+
             if engines:
                 for eng_id, engine in engines.items():
                     try:
-                        engine.run_cycle()
+                        # Only trade if NOT in standby
+                        engine.run_cycle(skip_trading=is_standby)
                     except Exception as e:
                         logging.error(f"Error in {eng_id} cycle: {e}")
             

@@ -144,7 +144,7 @@ class TradeEngine:
             logging.error(f"Error setting leverage: {e}")
             return False
 
-    def analyze(self, symbol, timeframe='1h'):
+    def analyze(self, symbol, timeframe='1h', skip_trading=False):
         df = self.fetch_ohlcv(symbol, timeframe)
         if df is None or len(df) < 50:
             return
@@ -153,7 +153,7 @@ class TradeEngine:
         signal, indicators_data = self.get_strategy_signal(df, self.params['active_strategy'], symbol)
         
         # Execute Trade Logic (only on the selected trading timeframe)
-        if timeframe == self.params.get('trading_timeframe', '1h'):
+        if timeframe == self.params.get('trading_timeframe', '1h') and not skip_trading:
             self.execute_trade_logic(symbol, signal, df['close'].iloc[-1])
 
         # Standard indicators for sentiment and stats (Independent of strategy)
@@ -312,16 +312,17 @@ class TradeEngine:
             'confluence': indicators_data.get('confluence')
         }
 
-    def run_cycle(self):
+    def run_cycle(self, skip_trading=False):
         for s in self.symbols:
             for tf in self.timeframes:
                 try:
-                    self.analyze(s, tf)
+                    self.analyze(s, tf, skip_trading=skip_trading)
                 except Exception as e:
                     logging.error(f"Analysis error for {s} ({tf}): {e}")
 
         # Check Stop Loss & Take Profit for all active positions
-        self.check_risk_management()
+        if not skip_trading:
+            self.check_risk_management()
 
 
     def execute_trade_logic(self, symbol, signal, price):
