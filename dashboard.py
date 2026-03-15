@@ -94,12 +94,14 @@ BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET")
 OKX_API_KEY = os.environ.get("OKX_API_KEY")
 OKX_API_SECRET = os.environ.get("OKX_API_SECRET")
 OKX_PASSPHRASE = os.environ.get("OKX_PASSPHRASE")
+# Default to True for OKX if not specified, as users often use Demo keys
+OKX_TESTNET = os.environ.get("OKX_TESTNET", "True").lower() == "true"
 
 engines = {}
 if BINANCE_API_KEY and BINANCE_API_SECRET:
     engines['binance'] = TradeEngine(BINANCE_API_KEY, BINANCE_API_SECRET, exchange_id='binance', testnet=False)
 if OKX_API_KEY and OKX_API_SECRET:
-    engines['okx'] = TradeEngine(OKX_API_KEY, OKX_API_SECRET, exchange_id='okx', testnet=False, passphrase=OKX_PASSPHRASE)
+    engines['okx'] = TradeEngine(OKX_API_KEY, OKX_API_SECRET, exchange_id='okx', testnet=OKX_TESTNET, passphrase=OKX_PASSPHRASE)
 
 if not engines:
     logging.warning("⚠️ No se encontraron API Keys válidas. El bot operará en modo limitado.")
@@ -109,6 +111,9 @@ def get_engine(engine_id=None):
     if not engine_id:
         return next(iter(engines.values())) if engines else None
     return engines.get(engine_id)
+
+# Global lists for UI feedback
+last_errors = []
 
 # Failover State (For PC -> Railway redundancy)
 last_primary_heartbeat = 0
@@ -148,6 +153,21 @@ def force_takeover():
 def receive_heartbeat():
     global last_primary_heartbeat, kill_requested
     last_primary_heartbeat = time.time()
+    
+    # Sync remote state from PC to Cloud so mobile view is updated
+    try:
+        data = request.json
+        if data and 'state' in data:
+            incoming_state = data['state']
+            for eng_id, eng_state in incoming_state.items():
+                if eng_id in engines and engines[eng_id]:
+                    engines[eng_id].trade_history = eng_state.get('trades', [])
+                    engines[eng_id].active_positions = eng_state.get('active', {})
+                    # Sync trading mode too so UI matches
+                    engines[eng_id].trading_mode = eng_state.get('mode', 'OFF')
+    except Exception as e:
+        logging.error(f"Error syncing heartbeat state: {e}")
+
     # If a takeover happened, we tell the PC to stop
     return jsonify({"status": "received", "kill_requested": kill_requested})
 
@@ -170,17 +190,31 @@ def bot_loop():
                 # We are the Primary (PC), send heartbeat to Railway
                 try:
                     import requests
-                    resp = requests.post(f"{primary_url}/api/failover/heartbeat", timeout=5)
+                    # Prepara el estado actual para sincronizar con la nube
+                    current_state = {}
+                    for eng_id, eng in engines.items():
+                        if eng:
+                            current_state[eng_id] = {
+                                'trades': eng.trade_history,
+                                'active': eng.active_positions,
+                                'mode': eng.trading_mode
+                            }
+                    
+                    resp = requests.post(f"{primary_url}/api/failover/heartbeat", 
+                                         json={'state': current_state}, 
+                                         timeout=5)
                     if resp.status_code == 200:
                         data = resp.json()
                         if data.get("kill_requested"):
                             logging.warning("🚨 SEÑAL DE APAGADO REMOTA RECIBIDA DESDE CLOUD. Cerrando bot local...")
                             os._exit(0) # Immediate exit
-                except:
+                except Exception as e:
+                    # Silent heartbeat fail is normal if cloud is down
                     pass
 
             if engines:
                 for eng_id, engine in engines.items():
+                    if not engine: continue
                     try:
                         # Only trade if NOT in standby
                         engine.run_cycle(skip_trading=is_standby)
@@ -211,6 +245,7 @@ def stream_updates():
         try:
             full_updates = {}
             for eng_id, engine in engines.items():
+                if not engine: continue
                 updates = {}
                 for symbol in engine.symbols:
                     try:
@@ -398,6 +433,14 @@ def set_trading_mode():
     if mode in ['OFF', 'SIM', 'REAL']:
         engine.trading_mode = mode
         logging.info(f"Trading mode for {engine.exchange_id} set to: {mode}")
+        
+        # Security warning for Demo keys
+        if mode == 'REAL':
+            if engine.exchange_id == 'okx' and OKX_TESTNET:
+                logging.warning("⚠️ MODO REAL ACTIVADO EN OKX - ATENCIÓN: El bot está usando el entorno DEMO (Sandbox). Los resultados no se verán en tu cuenta real. Cambia OKX_TESTNET=False en .env para Trading Real.")
+            elif engine.exchange_id == 'binance' and getattr(engine, 'testnet', False):
+                logging.warning("⚠️ MODO REAL ACTIVADO EN BINANCE pero detectado en entorno Testnet.")
+                
         return jsonify({"status": "success", "mode": mode})
     return jsonify({"status": "error", "message": "Invalid mode"}), 400
 
